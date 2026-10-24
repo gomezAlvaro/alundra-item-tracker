@@ -58,11 +58,18 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .pin.cleared .dot{background:var(--g)}
 .pin .lbl{position:absolute;left:19px;top:-11px;white-space:nowrap;background:#000d;color:#fff;padding:2px 7px;border-radius:5px;font-size:12.5px}
 .pin.l .lbl{left:auto;right:19px}
+#world.compact .pin .lbl{display:none}
+#world.compact .pin:hover .lbl{display:block}
+#world.compact .pin .dot{transform:scale(.8)}
+#world.compact .chip span{display:none}
 .pin.unreached{opacity:.55}
 .pin.unreached .lbl{color:#bbb}
 .pin:hover .lbl{background:#4cc2ff;color:#000}
 .pin.flash .dot{animation:pinflash .9s 2}
 @keyframes pinflash{50%{transform:scale(1.8)}}
+#zoom{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:6px;z-index:4}
+#zoom button{width:40px;height:40px;border-radius:8px;border:1px solid #fff4;background:#000c;color:#fff;font-size:22px;line-height:1;cursor:pointer;touch-action:manipulation}
+#zoom button:hover{background:#4cc2ff;color:#000}
 .legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin-left:10px;color:var(--muted);font-size:12px}
 .legend span{display:flex;align-items:center;gap:5px}
 .legend i{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;font-style:normal;font-weight:700;font-size:10px;color:#000;border:2px solid #888}
@@ -110,7 +117,7 @@ button.act{padding:5px 10px;border:1px solid var(--border);border-radius:6px;bac
 .empty{padding:10px 14px;color:var(--muted)}
 #avail div{display:flex;justify-content:space-between;font-size:12px}
 @media (max-width:900px){aside{width:270px}}
-@media (max-width:700px){body{flex-direction:column;height:auto;overflow:auto}main{height:70vh;flex:none}aside{width:auto;border-left:0;border-top:1px solid var(--border)}#legend{display:none}}
+@media (max-width:700px){body{flex-direction:column;height:auto;overflow:auto}main{height:75vh;flex:none}header .hint{display:none}.legend{margin-left:0;font-size:11px}aside{width:auto;border-left:0;border-top:1px solid var(--border)}#legend{display:none}}
 </style>
 </head>
 <body>
@@ -125,6 +132,7 @@ button.act{padding:5px 10px;border:1px solid var(--border);border-radius:6px;bac
       <div class="layer detail grid" id="grid"></div>
       <div class="layer detail" id="markers" style="pointer-events:none"></div>
     </div>
+    <div id="zoom"><button id="zoomIn" title="Zoom in">+</button><button id="zoomOut" title="Zoom out">−</button><button id="zoomFit" title="Fit to screen">⤢</button></div>
   </div>
 </main>
 <div id="tip"></div>
@@ -350,10 +358,9 @@ function renderOverview() {
     p.style.left = l.x + 'px'; p.style.top = l.y + 'px'; p.dataset.id = l.id; p.style.pointerEvents = 'auto';
     p.innerHTML = `<span class="dot">${countText(s) || (l.kind === 'hub' ? '≈' : '')}</span><span class="lbl"></span>`;
     p.lastChild.textContent = l.name;
-    p.onpointerdown = e => e.stopPropagation();
     p.onmouseenter = p.onmousemove = e => locTip(e, l, s);
     p.onmouseleave = hideTip;
-    p.onclick = () => go(l.id);
+    p.onclick = e => { e.stopPropagation(); if (!moved) go(l.id); };
     pins.append(p);
   }
 }
@@ -408,8 +415,7 @@ function renderMarkers() {
     m.className = `mk ${st} c${p.c}`; m.style.left = p.x + 'px'; m.style.top = p.y + 'px'; m.dataset.i = i; m.style.pointerEvents = 'auto';
     m.onmouseenter = m.onmousemove = e => chestTip(e, i);
     m.onmouseleave = hideTip;
-    m.onpointerdown = e => e.stopPropagation();
-    m.onclick = () => toggle(i);
+    m.onclick = () => { if (!moved) toggle(i); };
     mk.append(m);
 
     const row = document.createElement('div'); row.className = 'src ' + st;
@@ -516,6 +522,8 @@ const curView = () => here ? views.detail : views.overview;
 function applyView() {
   const v = curView(), w = $('world');
   w.style.transform = `translate(${v.x}px,${v.y}px) scale(${v.k})`; w.style.setProperty('--inv', 1 / v.k);
+  // Zoomed far out (a phone showing the whole world), pin labels would pile up: hide them until you zoom in
+  w.classList.toggle('compact', !here && v.k < 0.12);
 }
 function fitBox(v, x0, y0, x1, y1, pad) {
   const r = stage.getBoundingClientRect();
@@ -538,20 +546,63 @@ function fitDetail() {
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, hw = Math.max(x1 - x0 + 160, 900) / 2, hh = Math.max(y1 - y0 + 160, 700) / 2;
   fitBox(views.detail, cx - hw, cy - hh, cx + hw, cy + hh, 6);
 }
-let drag = null, moved = false;
-stage.onpointerdown = e => { const v = curView(); drag = { x: e.clientX - v.x, y: e.clientY - v.y, sx: e.clientX, sy: e.clientY }; moved = false; stage.classList.add('drag'); };
-addEventListener('pointerup', () => { drag = null; stage.classList.remove('drag'); });
+// One pointer pans; two (fingers on a phone) pinch-zoom around their midpoint
+const pointers = new Map();
+let drag = null, pinch = null, moved = false;
+const local = (x, y) => { const r = stage.getBoundingClientRect(); return [x - r.left, y - r.top]; };
+function zoomAt(mx, my, f) {
+  const v = curView(), k = Math.min(Math.max(v.k * f, 0.02), 8);
+  f = k / v.k; v.x = mx - (mx - v.x) * f; v.y = my - (my - v.y) * f; v.k = k; applyView();
+}
+function startGesture() {
+  const v = curView(), pts = [...pointers.values()];
+  drag = pinch = null;
+  if (pts.length === 1) drag = { x: pts[0].x - v.x, y: pts[0].y - v.y, sx: pts[0].x, sy: pts[0].y };
+  else if (pts.length >= 2) {
+    const [a, b] = pts, [mx, my] = local((a.x + b.x) / 2, (a.y + b.y) / 2);
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, k: v.k, wx: (mx - v.x) / v.k, wy: (my - v.y) / v.k };
+    moved = true; hideTip();
+  }
+}
+stage.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (!pointers.size) moved = false;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  startGesture(); stage.classList.add('drag');
+});
+const endPointer = e => {
+  if (!pointers.delete(e.pointerId)) return;
+  startGesture();
+  if (!pointers.size) stage.classList.remove('drag');
+};
+addEventListener('pointerup', endPointer);
+addEventListener('pointercancel', endPointer);
 addEventListener('pointermove', e => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  const v = curView();
+  if (pinch) {
+    const [a, b] = [...pointers.values()], [mx, my] = local((a.x + b.x) / 2, (a.y + b.y) / 2);
+    v.k = Math.min(Math.max(pinch.k * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d, 0.02), 8);
+    v.x = mx - pinch.wx * v.k; v.y = my - pinch.wy * v.k; applyView();
+    return;
+  }
   if (!drag) return;
-  if (!moved && Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) > 4) { moved = true; hideTip(); }
-  if (!moved) return;
-  const v = curView(); v.x = e.clientX - drag.x; v.y = e.clientY - drag.y; applyView();
+  if (!moved && Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) > 6) { moved = true; hideTip(); }
+  if (moved) { v.x = e.clientX - drag.x; v.y = e.clientY - drag.y; applyView(); }
 });
 stage.addEventListener('wheel', e => {
-  e.preventDefault(); const v = curView(), r = stage.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, f = Math.exp(-e.deltaY * 0.0015);
-  v.x = mx - (mx - v.x) * f; v.y = my - (my - v.y) * f; v.k *= f; applyView();
+  e.preventDefault(); const [mx, my] = local(e.clientX, e.clientY);
+  zoomAt(mx, my, Math.exp(-e.deltaY * 0.0015));
 }, { passive: false });
-addEventListener('resize', () => here ? fitDetail() : fitOverview());
+const zoomButton = f => { const r = stage.getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, f); };
+$('zoomIn').onclick = () => zoomButton(1.5);
+$('zoomOut').onclick = () => zoomButton(1 / 1.5);
+$('zoomFit').onclick = () => here ? fitDetail() : fitOverview();
+for (const b of document.querySelectorAll('#zoom button')) b.addEventListener('pointerdown', e => e.stopPropagation());
+// Phones fire resize when the address bar slides in or out: only refit when the width really changes
+let lastWidth = innerWidth;
+addEventListener('resize', () => { if (innerWidth === lastWidth) return; lastWidth = innerWidth; here ? fitDetail() : fitOverview(); });
 addEventListener('keydown', e => { if (e.key === 'Escape' && here && !e.target.closest('input')) go(null); });
 
 // ---- controls
