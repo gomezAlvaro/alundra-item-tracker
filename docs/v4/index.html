@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alundra World Tracker</title>
+<style>
+:root{--bg:#1b1c20;--panel:#25272d;--text:#e9e9ec;--muted:#9a9ca4;--border:#3a3d46;--accent:#4cc2ff;--done:#6fd88a;--cave:#e0a050;--dungeon:#c08cff;--shop:#f2d230;--hub:#5fd0e0;--g:#3ecf5a;--y:#f2d230;--r:#ef4b4b}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#e9e7e1;--panel:#fff;--text:#222;--muted:#6b6b6b;--border:#d4d0c4;--accent:#0a7fc2;--done:#2f9a4d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:13px/1.4 system-ui,sans-serif;display:flex;height:100vh;overflow:hidden}
+main{flex:1;display:flex;flex-direction:column;min-width:0}
+aside{background:var(--panel);display:flex;flex-direction:column;min-height:0;width:340px;border-left:1px solid var(--border)}
+header{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--border);min-height:44px;flex-wrap:wrap}
+header .crumb{background:none;border:0;color:var(--accent);cursor:pointer;font:inherit;padding:2px 4px;border-radius:4px}
+header .crumb:hover{background:var(--bg)}
+header .here{font-weight:600}
+header .sep{color:var(--muted)}
+header .hint{margin-left:auto;color:var(--muted);font-size:12px}
+.tabs{display:flex;gap:4px;margin-left:12px;flex-wrap:wrap}
+.tabs button{padding:3px 9px;border:1px solid var(--border);border-radius:12px;background:var(--bg);color:var(--text);cursor:pointer;font:inherit;font-size:12px}
+.tabs button.on{border-color:var(--accent);color:var(--accent)}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 6px}
+.list{overflow:auto;flex:1}
+#stage{flex:1;position:relative;overflow:hidden;background:#000;cursor:grab;touch-action:none}
+#stage.drag{cursor:grabbing}
+#world{position:absolute;left:0;top:0;transform-origin:0 0}
+#world img{display:block;image-rendering:pixelated;max-width:none}
+#world.overview .detail,#world.detail .overview{display:none}
+.layer{position:absolute;inset:0}
+.grid{pointer-events:none}
+.grid i{position:absolute;border:1px solid rgba(255,255,255,.35)}
+.grid b{position:absolute;color:#fff;font-size:calc(40px*var(--inv));text-shadow:0 0 6px #000;opacity:.7}
+/* overview: sectors, links and pins */
+.cellz{position:absolute;border:1px solid rgba(255,255,255,.28);cursor:pointer;transition:background .15s}
+.cellz:hover{background:rgba(76,194,255,.10);border-color:rgba(76,194,255,.7)}
+.cellz.fog{background:rgba(0,0,0,.58)}
+.cellz.fog:hover{background:rgba(0,0,0,.45)}
+.chip{position:absolute;transform:scale(var(--inv));transform-origin:0 0;display:flex;align-items:center;gap:7px;background:#000c;color:#fff;border-radius:8px;padding:4px 9px 4px 8px;white-space:nowrap;pointer-events:none;font-size:13px}
+.chip b{font-size:17px}
+.chip span{opacity:.85}
+.chip .cnt,.dot{font-weight:700;color:#000}
+.chip .cnt{border-radius:10px;padding:0 7px;font-size:12px;background:#555;color:#ddd}
+.chip .cnt.open{background:#4cc2ff;color:#000}
+.chip .cnt.cleared{background:var(--g);color:#000}
+.fog .chip,.chip.fog{opacity:.75}
+#links{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+#links line{stroke:#9aa;stroke-width:2.5;stroke-dasharray:7 6;opacity:.8}
+#links line.open{stroke:#4cc2ff;opacity:.95}
+.pin{position:absolute;width:0;height:0;transform:scale(var(--inv));transform-origin:0 0;cursor:pointer;z-index:1}
+.pin:hover{z-index:3}
+.pin .dot{position:absolute;left:-15px;top:-15px;width:30px;height:30px;border-radius:50%;border:3px solid var(--dungeon);background:#555;display:grid;place-items:center;font-size:13px;box-shadow:0 0 0 2px #000,0 0 10px #000}
+.pin.cave .dot{border-color:var(--cave)}
+.pin.shop .dot,.pin.place .dot{border-color:var(--shop)}
+.pin.hub .dot{border-color:var(--hub);background:#123}
+.pin.open .dot{background:#4cc2ff}
+.pin.left .dot{color:#ddd}
+.pin.cleared .dot{background:var(--g)}
+.pin .lbl{position:absolute;left:19px;top:-11px;white-space:nowrap;background:#000d;color:#fff;padding:2px 7px;border-radius:5px;font-size:12.5px}
+.pin.l .lbl{left:auto;right:19px}
+.pin.unreached{opacity:.55}
+.pin.unreached .lbl{color:#bbb}
+.pin:hover .lbl{background:#4cc2ff;color:#000}
+.pin.flash .dot{animation:pinflash .9s 2}
+@keyframes pinflash{50%{transform:scale(1.8)}}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin-left:10px;color:var(--muted);font-size:12px}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend i{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;font-style:normal;font-weight:700;font-size:10px;color:#000;border:2px solid #888}
+/* location map: chests */
+.mk{position:absolute;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;border:3px solid var(--g);transform:scale(var(--inv));box-shadow:0 0 0 2px #000,0 0 8px #000;cursor:pointer;display:grid;place-items:center;font-size:12px;font-weight:700;color:#000}
+.mk.cy{border-color:var(--y)}.mk.cr{border-color:var(--r)}
+.mk.reach{background:#4cc2ff}
+.mk.lock{background:#555;opacity:.45}
+.mk.done{background:#222;color:#8f8;opacity:.6}
+.mk.done::after{content:"✓"}
+.mk.hl{animation:pulse 1s 3}
+@keyframes pulse{50%{transform:scale(calc(var(--inv)*2.2))}}
+#tip{position:fixed;pointer-events:none;background:#000e;color:#fff;padding:6px 9px;border-radius:6px;font-size:12px;z-index:5;display:none;max-width:300px}
+.sec{padding:10px 14px;border-bottom:1px solid var(--border)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;color:var(--muted);font-size:12px}
+.row label{display:flex;gap:4px;align-items:center;cursor:pointer}
+button.act{padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);cursor:pointer;font:inherit}
+#drop{border:1px dashed var(--border);border-radius:8px;padding:10px;text-align:center;color:var(--muted);cursor:pointer}
+#drop.over{border-color:var(--accent);color:var(--accent)}
+#status{font-size:12px;color:var(--muted);margin-top:6px}
+#status b{color:var(--text)}
+.inv{display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;max-height:190px;overflow:auto}
+.it{display:flex;justify-content:space-between;align-items:center;gap:4px}
+.it span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.it.has span{color:var(--accent)}
+.it button{width:20px;height:20px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);cursor:pointer;padding:0;line-height:1}
+.it .n{min-width:18px;text-align:center}
+.listhead{padding:8px 14px 4px}
+.src,.loc{padding:6px 14px;border-top:1px solid var(--border);cursor:pointer}
+.src:hover,.loc:hover{background:var(--bg)}
+.src b{font-weight:500;display:block}
+.src span{color:var(--muted);font-size:12px}
+.src.reach b::before{content:"● ";color:var(--accent)}
+.src.lock b::before{content:"○ ";color:var(--muted)}
+.src.lock{opacity:.6}
+.src.done b::before{content:"✓ ";color:var(--done)}
+.src.done{opacity:.5}
+.loc{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.loc small{color:var(--muted)}
+.loc .n{background:var(--accent);color:#000;font-weight:700;border-radius:9px;padding:0 7px;font-size:12px}
+.exits{display:flex;flex-wrap:wrap;gap:5px}
+.exits button{padding:3px 8px;border:1px solid var(--border);border-radius:12px;background:var(--bg);color:var(--text);cursor:pointer;font:inherit;font-size:12px}
+.exits button:hover{border-color:var(--accent)}
+.exits button b{color:var(--accent)}
+.empty{padding:10px 14px;color:var(--muted)}
+#avail div{display:flex;justify-content:space-between;font-size:12px}
+@media (max-width:900px){aside{width:270px}}
+@media (max-width:700px){body{flex-direction:column;height:auto;overflow:auto}main{height:70vh;flex:none}aside{width:auto;border-left:0;border-top:1px solid var(--border)}#legend{display:none}}
+</style>
+</head>
+<body>
+<main>
+  <header id="crumbs"></header>
+  <div id="stage">
+    <div id="world" class="overview">
+      <img id="img" alt="" draggable="false">
+      <div class="layer overview" id="cells"></div>
+      <svg class="overview" id="links" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="layer overview" id="pins" style="pointer-events:none"></div>
+      <div class="layer detail grid" id="grid"></div>
+      <div class="layer detail" id="markers" style="pointer-events:none"></div>
+    </div>
+  </div>
+</main>
+<div id="tip"></div>
+<aside>
+  <div class="sec">
+    <div id="drop">Drop your <b>spoiler.json</b> here, or click to choose<input id="file" type="file" accept=".json,application/json" hidden></div>
+    <div id="status"></div>
+    <div class="row" style="margin-top:8px">
+      <label><input type="checkbox" id="spoil"> Show chest contents (spoilers)</label>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <label><input type="checkbox" id="showLocked" checked> locked</label>
+      <label><input type="checkbox" id="showDone" checked> collected</label>
+      <button class="act" id="reset">Reset progress</button>
+    </div>
+  </div>
+  <div class="sec"><h2>Items you have</h2><div class="inv" id="inv"></div></div>
+  <div class="sec" id="availSec" style="display:none"><h2>Available in reachable chests</h2><div id="avail"></div></div>
+  <div class="sec" id="exitSec" style="display:none"><h2>Connects to</h2><div class="exits" id="exits"></div></div>
+  <div class="listhead"><h2 id="listTitle"></h2></div>
+  <div class="list" id="srcs"></div>
+</aside>
+<script>
+const ATLAS = {"maps":[{"id":"world","file":"World.png","title":"Overworld","w":6247,"h":3845},{"id":"watermill","file":"Watermill.png","title":"Watermill & caverns","w":1247,"h":1287},{"id":"sanctuary","file":"SanctuaryArea.png","title":"Sanctuary area & caves","w":1917,"h":959},{"id":"coalarea","file":"CoalMineArea.png","title":"Coal Mine area & caves","w":1686,"h":2415},{"id":"murgg","file":"MurggWoods.png","title":"Murgg Woods caves","w":2875,"h":2202},{"id":"mimics","file":"Shack.png","title":"Ruins & Mimics cave (A3)","w":2177,"h":959},{"id":"cliffs","file":"CliffsOfMadness.png","title":"Cliffs of Madness well & Lurvy","w":2079,"h":1056},{"id":"desertn","file":"DespairDesertN.png","title":"Despair Desert N caves","w":1935,"h":959},{"id":"deserts","file":"DespairDesertS.png","title":"Despair Desert S cave","w":1903,"h":1051},{"id":"navacabin","file":"BeachNavasCabin.png","title":"Nava's cabin","w":1560,"h":959},{"id":"casino","file":"PubPool.png","title":"Riverside Casino","w":1247,"h":1596},{"id":"waterway","file":"UndergroundWaterway.png","title":"Underground Waterway","w":1498,"h":2335},{"id":"firemanor","file":"FireManor.png","title":"Fire Manor","w":1828,"h":1781},{"id":"inoa","file":"InoaVillage.png","title":"Inoa Village","w":2848,"h":2137},{"id":"lars","file":"LarsCrypt.png","title":"Lars' Crypt","w":2683,"h":2557},{"id":"coal","file":"InsideCoalMine.png","title":"Coal Mine","w":4292,"h":1941},{"id":"tarn","file":"TarnsManor.png","title":"Tarn's Manor","w":1123,"h":2645},{"id":"coastal","file":"CoastalCave.png","title":"Coastal Cave","w":3185,"h":3043},{"id":"reptile","file":"ReptileLair.png","title":"Reptile Lair","w":3126,"h":2923},{"id":"fairy","file":"FairyPond.png","title":"Fairy Pond","w":1872,"h":1921},{"id":"nava","file":"NavasKeep.png","title":"Nava's Keep","w":2499,"h":1879},{"id":"shrine","file":"AncientShrine.png","title":"Ancient Shrine","w":2046,"h":4232},{"id":"magyscar","file":"Magyscar.png","title":"Magyscar","w":5102,"h":2703},{"id":"torla","file":"TorlaMountain.png","title":"Torla Mountain","w":3335,"h":3533},{"id":"ice","file":"MtTorlaIceManor.png","title":"Mt. Torla & Ice Manor","w":1586,"h":1552},{"id":"nirude","file":"NirudesLair.png","title":"Nirude's Lair","w":3103,"h":2502},{"id":"tower","file":"TowerOfTheGreatTree.png","title":"Tower of the Great Tree","w":2121,"h":2824},{"id":"lakeext","file":"LakeShrine.png","title":"Lake Shrine (exterior)","w":3687,"h":2613},{"id":"lakeint","file":"LakeShrineInterior.png","title":"Lake Shrine (interior)","w":4514,"h":2987}],"placements":{"0":{"map":"inoa","x":484,"y":1665,"c":"g"},"1":{"map":"inoa","x":1777,"y":369,"c":"r"},"2":{"map":"inoa","x":1816,"y":369,"c":"r"},"3":{"map":"sanctuary","x":602,"y":129,"c":"g"},"4":{"map":"sanctuary","x":168,"y":346,"c":"g"},"5":{"map":"sanctuary","x":1771,"y":690,"c":"r"},"6":{"map":"sanctuary","x":168,"y":106,"c":"g"},"7":{"map":"world","x":4254,"y":1147,"c":"g"},"8":{"map":"world","x":4674,"y":1523,"c":"g"},"9":{"map":"world","x":4878,"y":1723,"c":"g"},"10":{"map":"waterway","x":72,"y":1282,"c":"g"},"11":{"map":"watermill","x":973,"y":1108,"c":"g"},"12":{"map":"watermill","x":1033,"y":1108,"c":"g"},"13":{"map":"watermill","x":1093,"y":1108,"c":"g"},"14":{"map":"watermill","x":116,"y":1045,"c":"g"},"15":{"map":"watermill","x":116,"y":1109,"c":"g"},"16":{"map":"watermill","x":764,"y":1077,"c":"g"},"17":{"map":"watermill","x":812,"y":1141,"c":"g"},"18":{"map":"world","x":4602,"y":2509,"c":"g"},"19":{"map":"world","x":3882,"y":2485,"c":"g"},"20":{"map":"world","x":3798,"y":2669,"c":"g"},"21":{"map":"world","x":3847,"y":2665,"c":"g"},"22":{"map":"world","x":3870,"y":2701,"c":"g"},"23":{"map":"world","x":4074,"y":2029,"c":"g"},"24":{"map":"world","x":4098,"y":2029,"c":"g"},"25":{"map":"world","x":4122,"y":2029,"c":"g"},"26":{"map":"world","x":4146,"y":2029,"c":"g"},"27":{"map":"world","x":3870,"y":2927,"c":"g"},"28":{"map":"world","x":3954,"y":2951,"c":"g"},"29":{"map":"world","x":4134,"y":3391,"c":"g"},"30":{"map":"world","x":4458,"y":3527,"c":"g"},"31":{"map":"world","x":4830,"y":3359,"c":"g"},"32":{"map":"world","x":2668,"y":3463,"c":"g"},"33":{"map":"world","x":3628,"y":3615,"c":"g"},"34":{"map":"world","x":3316,"y":3727,"c":"g"},"35":{"map":"world","x":3652,"y":3287,"c":"g"},"36":{"map":"world","x":3000,"y":3170,"c":"g"},"37":{"map":"world","x":3568,"y":3431,"c":"g"},"38":{"map":"world","x":3208,"y":763,"c":"g"},"39":{"map":"world","x":3664,"y":793,"c":"g"},"40":{"map":"world","x":3520,"y":449,"c":"g"},"41":{"map":"world","x":2572,"y":561,"c":"g"},"42":{"map":"world","x":2908,"y":433,"c":"g"},"43":{"map":"world","x":2944,"y":433,"c":"g"},"44":{"map":"world","x":4362,"y":529,"c":"g"},"45":{"map":"world","x":4290,"y":49,"c":"g"},"46":{"map":"world","x":4326,"y":49,"c":"g"},"47":{"map":"ice","x":1412,"y":96,"c":"g"},"48":{"map":"world","x":2007,"y":3491,"c":"g"},"49":{"map":"world","x":2030,"y":2983,"c":"g"},"50":{"map":"world","x":1418,"y":3462,"c":"g"},"51":{"map":"navacabin","x":191,"y":764,"c":"g"},"52":{"map":"world","x":1802,"y":2701,"c":"g"},"53":{"map":"world","x":2462,"y":1989,"c":"g"},"54":{"map":"world","x":1875,"y":2080,"c":"g"},"55":{"map":"casino","x":726,"y":1284,"c":"r"},"56":{"map":"casino","x":784,"y":1284,"c":"r"},"57":{"map":"casino","x":138,"y":1284,"c":"r"},"58":{"map":"casino","x":196,"y":1284,"c":"r"},"59":{"map":"casino","x":457,"y":1284,"c":"r"},"60":{"map":"casino","x":515,"y":1284,"c":"r"},"61":{"map":"world","x":1840,"y":1545,"c":"g"},"62":{"map":"world","x":1598,"y":1187,"c":"g"},"63":{"map":"coalarea","x":330,"y":149,"c":"g"},"64":{"map":"coalarea","x":1520,"y":251,"c":"g"},"65":{"map":"coalarea","x":1382,"y":602,"c":"g"},"66":{"map":"world","x":1598,"y":1331,"c":"g"},"67":{"map":"firemanor","x":612,"y":353,"c":"g"},"68":{"map":"firemanor","x":1369,"y":1469,"c":"g"},"69":{"map":"firemanor","x":854,"y":1351,"c":"g"},"70":{"map":"firemanor","x":1460,"y":202,"c":"g"},"71":{"map":"world","x":108,"y":2021,"c":"g"},"72":{"map":"world","x":348,"y":2245,"c":"g"},"73":{"map":"world","x":780,"y":2069,"c":"g"},"74":{"map":"world","x":804,"y":2069,"c":"g"},"75":{"map":"world","x":828,"y":2069,"c":"g"},"76":{"map":"mimics","x":44,"y":705,"c":"g"},"77":{"map":"mimics","x":548,"y":705,"c":"g"},"78":{"map":"mimics","x":296,"y":825,"c":"g"},"79":{"map":"mimics","x":452,"y":825,"c":"g"},"80":{"map":"world","x":948,"y":2197,"c":"g"},"81":{"map":"world","x":1164,"y":2437,"c":"g"},"82":{"map":"world","x":708,"y":2277,"c":"g"},"83":{"map":"world","x":636,"y":1315,"c":"g"},"84":{"map":"murgg","x":2644,"y":1836,"c":"g"},"85":{"map":"murgg","x":2490,"y":101,"c":"g"},"86":{"map":"murgg","x":2526,"y":69,"c":"g"},"87":{"map":"murgg","x":2562,"y":101,"c":"g"},"88":{"map":"world","x":852,"y":1379,"c":"g"},"89":{"map":"world","x":972,"y":1043,"c":"g"},"90":{"map":"world","x":540,"y":1859,"c":"g"},"91":{"map":"world","x":612,"y":1795,"c":"g"},"92":{"map":"murgg","x":324,"y":830,"c":"g"},"93":{"map":"world","x":1634,"y":233,"c":"g"},"94":{"map":"world","x":6008,"y":601,"c":"g"},"95":{"map":"world","x":6032,"y":73,"c":"g"},"96":{"map":"world","x":5768,"y":1035,"c":"g"},"97":{"map":"world","x":6164,"y":1251,"c":"g"},"98":{"map":"world","x":5672,"y":1771,"c":"g"},"99":{"map":"desertn","x":1797,"y":673,"c":"g"},"100":{"map":"desertn","x":1791,"y":590,"c":"g"},"101":{"map":"world","x":6152,"y":2133,"c":"g"},"102":{"map":"world","x":5120,"y":2413,"c":"g"},"103":{"map":"world","x":5096,"y":2741,"c":"g"},"104":{"map":"world","x":5864,"y":2261,"c":"g"},"105":{"map":"deserts","x":1605,"y":906,"c":"g"},"106":{"map":"world","x":5053,"y":3105,"c":"g"},"107":{"map":"world","x":5096,"y":3423,"c":"g"},"108":{"map":"world","x":5360,"y":3215,"c":"g"},"109":{"map":"world","x":5432,"y":3031,"c":"g"},"110":{"map":"world","x":5876,"y":3031,"c":"g"},"111":{"map":"world","x":5900,"y":3031,"c":"g"},"112":{"map":"world","x":5924,"y":3031,"c":"g"},"113":{"map":"world","x":5948,"y":3255,"c":"g"},"114":{"map":"world","x":6056,"y":3439,"c":"g"},"115":{"map":"cliffs","x":1661,"y":946,"c":"g"},"116":{"map":"cliffs","x":1589,"y":642,"c":"g"},"117":{"map":"coalarea","x":572,"y":1889,"c":"g"},"118":{"map":"coalarea","x":212,"y":2225,"c":"g"},"119":{"map":"tarn","x":228,"y":721,"c":"g"},"120":{"map":"tarn","x":730,"y":257,"c":"y"},"121":{"map":"tarn","x":888,"y":1341,"c":"y"},"122":{"map":"tarn","x":456,"y":1421,"c":"y"},"123":{"map":"tarn","x":552,"y":1429,"c":"g"},"124":{"map":"tarn","x":463,"y":2093,"c":"y"},"125":{"map":"tarn","x":933,"y":520,"c":"g"},"126":{"map":"tarn","x":933,"y":104,"c":"y"},"127":{"map":"tarn","x":1005,"y":104,"c":"g"},"128":{"map":"tarn","x":969,"y":104,"c":"r"},"129":{"map":"coal","x":1101,"y":123,"c":"y"},"130":{"map":"coal","x":1197,"y":123,"c":"y"},"131":{"map":"coal","x":1293,"y":123,"c":"y"},"132":{"map":"coal","x":1389,"y":123,"c":"y"},"133":{"map":"coal","x":2555,"y":953,"c":"g"},"134":{"map":"coal","x":2483,"y":1081,"c":"g"},"135":{"map":"coal","x":492,"y":1737,"c":"g"},"136":{"map":"coal","x":78,"y":1338,"c":"g"},"137":{"map":"coal","x":667,"y":678,"c":"g"},"138":{"map":"fairy","x":57,"y":679,"c":"g"},"139":{"map":"fairy","x":225,"y":775,"c":"g"},"140":{"map":"fairy","x":1731,"y":520,"c":"g"},"141":{"map":"fairy","x":457,"y":133,"c":"g"},"142":{"map":"fairy","x":457,"y":565,"c":"g"},"143":{"map":"fairy","x":529,"y":741,"c":"g"},"144":{"map":"fairy","x":1078,"y":408,"c":"g"},"145":{"map":"shrine","x":482,"y":2882,"c":"g"},"146":{"map":"shrine","x":1334,"y":2954,"c":"g"},"147":{"map":"shrine","x":325,"y":4109,"c":"g"},"148":{"map":"shrine","x":703,"y":3499,"c":"g"},"149":{"map":"shrine","x":1434,"y":617,"c":"g"},"150":{"map":"shrine","x":1483,"y":615,"c":"g"},"151":{"map":"shrine","x":1528,"y":616,"c":"g"},"152":{"map":"coastal","x":250,"y":2870,"c":"r"},"153":{"map":"coastal","x":675,"y":1498,"c":"y"},"154":{"map":"coastal","x":784,"y":851,"c":"y"},"155":{"map":"coastal","x":1312,"y":2175,"c":"y"},"156":{"map":"coastal","x":1250,"y":2300,"c":"r"},"157":{"map":"coastal","x":1743,"y":2469,"c":"g"},"158":{"map":"coastal","x":1111,"y":1125,"c":"g"},"159":{"map":"coastal","x":1616,"y":2038,"c":"g"},"160":{"map":"coastal","x":1616,"y":2166,"c":"g"},"161":{"map":"coastal","x":2964,"y":986,"c":"g"},"162":{"map":"coastal","x":2247,"y":1948,"c":"g"},"163":{"map":"coastal","x":2900,"y":1750,"c":"r"},"164":{"map":"tower","x":1127,"y":2699,"c":"g"},"165":{"map":"tower","x":1007,"y":2043,"c":"g"},"166":{"map":"tower","x":1295,"y":1963,"c":"g"},"167":{"map":"tower","x":1487,"y":1963,"c":"g"},"168":{"map":"tower","x":191,"y":2038,"c":"g"},"169":{"map":"tower","x":323,"y":2582,"c":"y"},"170":{"map":"tower","x":611,"y":2598,"c":"y"},"171":{"map":"tower","x":446,"y":1081,"c":"y"},"172":{"map":"tower","x":794,"y":1001,"c":"g"},"173":{"map":"tower","x":818,"y":1001,"c":"g"},"174":{"map":"tower","x":1382,"y":1069,"c":"g"},"175":{"map":"tower","x":1442,"y":1069,"c":"g"},"176":{"map":"tower","x":1322,"y":1133,"c":"g"},"177":{"map":"tower","x":1442,"y":1133,"c":"g"},"178":{"map":"tower","x":1610,"y":1373,"c":"y"},"179":{"map":"tower","x":1934,"y":1525,"c":"g"},"180":{"map":"tower","x":1826,"y":1661,"c":"g"},"181":{"map":"tower","x":2042,"y":1661,"c":"g"},"182":{"map":"tower","x":1851,"y":143,"c":"g"},"183":{"map":"tower","x":2043,"y":143,"c":"g"},"184":{"map":"tower","x":836,"y":121,"c":"g"},"185":{"map":"tower","x":1000,"y":900,"c":"r"},"186":{"map":"tower","x":1120,"y":900,"c":"r"},"187":{"map":"world","x":60,"y":289,"c":"g"},"188":{"map":"world","x":1212,"y":65,"c":"g"},"189":{"map":"waterway","x":588,"y":794,"c":"g"},"190":{"map":"waterway","x":732,"y":522,"c":"g"},"191":{"map":"waterway","x":1204,"y":2040,"c":"g"},"192":{"map":"waterway","x":118,"y":1530,"c":"g"},"193":{"map":"waterway","x":1209,"y":66,"c":"g"},"194":{"map":"lars","x":1304,"y":1146,"c":"g"},"195":{"map":"lars","x":1400,"y":1146,"c":"g"},"196":{"map":"lars","x":1792,"y":1184,"c":"y"},"197":{"map":"lars","x":1663,"y":1650,"c":"y"},"198":{"map":"lars","x":1919,"y":296,"c":"g"},"199":{"map":"lars","x":288,"y":2316,"c":"g"},"200":{"map":"lars","x":229,"y":1427,"c":"r"},"201":{"map":"lars","x":326,"y":1427,"c":"r"},"202":{"map":"lars","x":421,"y":1427,"c":"r"},"203":{"map":"lars","x":150,"y":1440,"c":"r"},"204":{"map":"magyscar","x":498,"y":1560,"c":"g"},"205":{"map":"magyscar","x":954,"y":1432,"c":"g"},"206":{"map":"magyscar","x":942,"y":1784,"c":"g"},"207":{"map":"magyscar","x":1860,"y":1700,"c":"r"},"208":{"map":"magyscar","x":2979,"y":956,"c":"g"},"209":{"map":"magyscar","x":2911,"y":2234,"c":"g"},"210":{"map":"magyscar","x":3729,"y":1556,"c":"y"},"211":{"map":"magyscar","x":1352,"y":381,"c":"g"},"212":{"map":"magyscar","x":1400,"y":470,"c":"r"},"213":{"map":"magyscar","x":2300,"y":1500,"c":"r"},"214":{"map":"magyscar","x":744,"y":578,"c":"g"},"215":{"map":"magyscar","x":912,"y":466,"c":"g"},"216":{"map":"magyscar","x":828,"y":338,"c":"g"},"217":{"map":"magyscar","x":4800,"y":1737,"c":"g"},"218":{"map":"reptile","x":347,"y":774,"c":"y"},"219":{"map":"reptile","x":881,"y":802,"c":"g"},"220":{"map":"reptile","x":773,"y":466,"c":"g"},"221":{"map":"reptile","x":1661,"y":274,"c":"g"},"222":{"map":"reptile","x":2994,"y":147,"c":"y"},"223":{"map":"reptile","x":1781,"y":466,"c":"y"},"224":{"map":"reptile","x":1234,"y":1069,"c":"g"},"225":{"map":"reptile","x":1402,"y":1421,"c":"g"},"226":{"map":"reptile","x":766,"y":1181,"c":"g"},"227":{"map":"reptile","x":737,"y":2108,"c":"g"},"228":{"map":"reptile","x":785,"y":2124,"c":"g"},"229":{"map":"torla","x":3157,"y":2714,"c":"g"},"230":{"map":"torla","x":2626,"y":2184,"c":"g"},"231":{"map":"torla","x":2841,"y":1272,"c":"g"},"232":{"map":"torla","x":1978,"y":2691,"c":"g"},"233":{"map":"torla","x":1023,"y":1991,"c":"g"},"234":{"map":"torla","x":1106,"y":571,"c":"g"},"235":{"map":"torla","x":1486,"y":466,"c":"g"},"236":{"map":"nirude","x":489,"y":1689,"c":"g"},"237":{"map":"nirude","x":516,"y":2335,"c":"g"},"238":{"map":"nirude","x":1269,"y":2215,"c":"g"},"239":{"map":"world","x":5084,"y":593,"c":"g"},"240":{"map":"world","x":5120,"y":593,"c":"g"},"241":{"map":"nirude","x":509,"y":1431,"c":"g"},"242":{"map":"world","x":5144,"y":313,"c":"g"},"243":{"map":"nirude","x":600,"y":2400,"c":"r"},"244":{"map":"nirude","x":2497,"y":1324,"c":"g"},"245":{"map":"nirude","x":2305,"y":1372,"c":"g"},"246":{"map":"nirude","x":1860,"y":880,"c":"r"},"247":{"map":"nirude","x":1920,"y":880,"c":"r"},"248":{"map":"nava","x":900,"y":1730,"c":"r"},"249":{"map":"nava","x":490,"y":848,"c":"g"},"250":{"map":"nava","x":2137,"y":461,"c":"g"},"251":{"map":"nava","x":1657,"y":693,"c":"g"},"252":{"map":"nava","x":210,"y":640,"c":"r"},"253":{"map":"world","x":3345,"y":3335,"c":"r"},"254":{"map":"world","x":3369,"y":3335,"c":"r"},"255":{"map":"world","x":3393,"y":3335,"c":"r"},"256":{"map":"world","x":3417,"y":3335,"c":"r"},"257":{"map":"world","x":3345,"y":3361,"c":"r"},"258":{"map":"world","x":3369,"y":3361,"c":"r"},"259":{"map":"world","x":3393,"y":3361,"c":"r"},"260":{"map":"world","x":3417,"y":3361,"c":"r"},"261":{"map":"cliffs","x":1856,"y":824,"c":"r"},"262":{"map":"cliffs","x":1897,"y":824,"c":"r"},"263":{"map":"cliffs","x":1939,"y":824,"c":"r"},"264":{"map":"cliffs","x":1981,"y":824,"c":"r"},"265":{"map":"cliffs","x":2022,"y":824,"c":"r"},"266":{"map":"cliffs","x":2022,"y":824,"c":"r"},"267":{"map":"cliffs","x":2022,"y":824,"c":"r"},"268":{"map":"cliffs","x":1939,"y":886,"c":"r"},"269":{"map":"inoa","x":2321,"y":990,"c":"r"},"270":{"map":"inoa","x":2371,"y":990,"c":"r"},"271":{"map":"inoa","x":2421,"y":990,"c":"r"},"272":{"map":"inoa","x":2464,"y":990,"c":"r"},"273":{"map":"lakeext","x":3404,"y":1983,"c":"y"},"274":{"map":"lakeext","x":2222,"y":1297,"c":"y"},"275":{"map":"lakeext","x":1890,"y":2280,"c":"y"},"276":{"map":"lakeext","x":200,"y":700,"c":"r"},"277":{"map":"lakeext","x":597,"y":118,"c":"g"},"278":{"map":"lakeext","x":741,"y":118,"c":"g"},"279":{"map":"lakeint","x":1012,"y":2609,"c":"g"},"280":{"map":"lakeint","x":725,"y":2740,"c":"g"},"281":{"map":"lakeint","x":2492,"y":2547,"c":"g"},"282":{"map":"lakeint","x":2560,"y":2520,"c":"r"},"283":{"map":"lakeint","x":3102,"y":2610,"c":"y"},"284":{"map":"lakeint","x":52,"y":2319,"c":"y"},"285":{"map":"lakeint","x":1159,"y":2030,"c":"g"},"286":{"map":"lakeint","x":1719,"y":2092,"c":"g"},"287":{"map":"lakeint","x":2195,"y":1925,"c":"y"},"288":{"map":"lakeint","x":3900,"y":2150,"c":"r"},"289":{"map":"lakeint","x":756,"y":595,"c":"g"},"290":{"map":"lakeint","x":1764,"y":563,"c":"g"}},"sources":[{"full":"Inoa: Chest in Lutas's house","vanilla":"Secret Pass","node":"inoa"},{"full":"Inoa: First item in Jess's blue chest","vanilla":"Jess's Letter","node":"inoa_jess_chest"},{"full":"Inoa: Second item in Jess's blue chest","vanilla":"Broken Armor","node":"inoa_jess_chest"},{"full":"Overworld C2: Chest in Olen's house","vanilla":"Gilded Falcon","node":"overworld_c2"},{"full":"Overworld C2: First chest in top-left cave","vanilla":"Herbs","node":"overworld_c2"},{"full":"Overworld C2: Chest in graveyard house basement","vanilla":"Nava's Charm","node":"overworld_c2_graveyard_house"},{"full":"Overworld C2: Chest in top-left cave behind springs","vanilla":"Gilded Falcon","node":"overworld_c2_cave_behind_spring"},{"full":"Overworld D2: Middle chest","vanilla":"Herbs","node":"overworld_d2"},{"full":"Overworld D2: Cliff chest","vanilla":"Life Vessel","node":"overworld_d2_chest_cliff"},{"full":"Overworld D2: Pier chest","vanilla":"Gilded Falcon","node":"overworld_d2"},{"full":"Overworld D2: Chest in cave next to Underground Waterway","vanilla":"Herbs","node":"overworld_d2"},{"full":"Overworld D2: Left chest in watermill","vanilla":"30 Gilder","node":"overworld_d2_watermill"},{"full":"Overworld D2: Middle chest in watermill","vanilla":"Gilded Falcon","node":"overworld_d2_watermill"},{"full":"Overworld D2: Right chest in watermill","vanilla":"Strength Tonic","node":"overworld_d2_watermill"},{"full":"Overworld D2 (Cavern): Chest in left half of cavern","vanilla":"Herbs","node":"overworld_d2_cave"},{"full":"Overworld D2 (Cavern): Chest falling after beating all slimes","vanilla":"Wonder Essence","node":"overworld_d2_cave"},{"full":"Overworld D2 (Cavern): Upper chest in right half of cavern","vanilla":"30 Gilder","node":"overworld_d2_cave_behind_merman"},{"full":"Overworld D2 (Cavern): Lower chest in right half of cavern","vanilla":"Gilded Falcon","node":"overworld_d2_cave_behind_merman"},{"full":"Overworld D3: Elevated chest near bridge","vanilla":"Magic Seed","node":"overworld_d3_behind_spring_and_vines"},{"full":"Overworld D3: Elevated chest near left border","vanilla":"Gilded Falcon","node":"overworld_d3_behind_spring"},{"full":"Overworld D3: Leftmost chest in 3-chest group","vanilla":"Herbs","node":"overworld_d3"},{"full":"Overworld D3: Middle chest in 3-chest group","vanilla":"Herbs","node":"overworld_d3"},{"full":"Overworld D3: Rightmost chest in 3-chest group","vanilla":"Herbs","node":"overworld_d3"},{"full":"Overworld D3: 1st chest in 4-chest group","vanilla":"30 Gilder","node":"overworld_d3_behind_vines"},{"full":"Overworld D3: 2nd chest in 4-chest group","vanilla":"30 Gilder","node":"overworld_d3_behind_vines"},{"full":"Overworld D3: 3rd chest in 4-chest group","vanilla":"30 Gilder","node":"overworld_d3_behind_vines"},{"full":"Overworld D3: Rightmost chest in 4-chest group","vanilla":"30 Gilder","node":"overworld_d3_behind_vines"},{"full":"Overworld D4: Elevated chest at top-left corner","vanilla":"Life Vessel","node":"overworld_d4"},{"full":"Overworld D4: Second chest at top-left corner","vanilla":"Herbs","node":"overworld_d4"},{"full":"Overworld D4: Chest to the left of the swamp","vanilla":"30 Gilder","node":"overworld_d4"},{"full":"Overworld D4: Chest on left swamp island","vanilla":"Gilded Falcon","node":"overworld_d4_behind_long_boots"},{"full":"Overworld D4: Right swamp chest","vanilla":"Strength Tonic","node":"overworld_d4"},{"full":"Overworld C4: Left coast chest","vanilla":"Magic Elixyr","node":"overworld_c4_behind_long_boots"},{"full":"Overworld C4: Bottom-right cliff upper chest","vanilla":"Gilded Falcon","node":"overworld_c4"},{"full":"Overworld C4: Bottom-right cliff lower chest","vanilla":"Life Vessel","node":"overworld_c4_right_cliff_behind_long_boots"},{"full":"Overworld C4: Chest inside forest near the right border","vanilla":"Strength Elixyr","node":"overworld_c4"},{"full":"Overworld C4: Chest hidden among the trees near the middle","vanilla":"30 Gilder","node":"overworld_c4"},{"full":"Overworld C4: Right coast chest behind spring","vanilla":"Gilded Falcon","node":"overworld_c4_behind_spring"},{"full":"Overworld C1: Chest accessible from cave","vanilla":"Life Vessel","node":"overworld_c1_elevated_cavern"},{"full":"Overworld C1: Chest on cliff accessible from right map","vanilla":"Gilded Falcon","node":"overworld_c1_cliff"},{"full":"Overworld C1: Chest in right section","vanilla":"30 Gilder","node":"overworld_c1_right_sector"},{"full":"Overworld C1: Leftmost chest","vanilla":"Herbs","node":"overworld_c1"},{"full":"Overworld C1: Left chest in two chests group","vanilla":"10 Gilder","node":"overworld_c1"},{"full":"Overworld C1: Right chest in two chests group","vanilla":"10 Gilder","node":"overworld_c1"},{"full":"Overworld D1: Elevated chest in cliffs labyrinth","vanilla":"Strength Elixyr","node":"overworld_d1_cliff_maze"},{"full":"Overworld D1: Left chest in two chests group","vanilla":"Herbs","node":"overworld_d1"},{"full":"Overworld D1: Right chest in two chests group","vanilla":"Strength Tonic","node":"overworld_d1"},{"full":"Ice Manor: Reward chest","vanilla":"Ice Wand","node":"ice_manor"},{"full":"Overworld B4: Chest hidden behind cabins on the pier","vanilla":"Gilded Falcon","node":"overworld_b4_behind_merman"},{"full":"Overworld B4: Chest behind the tree stump","vanilla":"Gilded Falcon","node":"overworld_b4_behind_bomb"},{"full":"Overworld B4: Chest accessible from left map","vanilla":"Gilded Falcon","node":"overworld_b4_behind_power_glove"},{"full":"Overworld B4: Chest in Nava's cabin","vanilla":"Gilded Falcon","node":"overworld_b4_nava_hut_behind_spring"},{"full":"Overworld B3: Elevated chest accessible from bottom map","vanilla":"Magic Seed","node":"overworld_b3_elevated"},{"full":"Overworld B3: Chest behind vines","vanilla":"Life Vessel","node":"overworld_b3_behind_vines"},{"full":"Overworld B3: King Snow reward for dying a specified amount of times","vanilla":"Legend Sword","node":"overworld_b3_behind_power_glove"},{"full":"Riverside Casino: 'Wheel of Fortune' chest","vanilla":"Life Vessel","node":"riverside_casino"},{"full":"Riverside Casino: 'Wheel of Fortune' second reward","vanilla":"Gilded Falcon","node":"riverside_casino"},{"full":"Riverside Casino: 'Hit Your Mark' chest","vanilla":"Life Vessel","node":"riverside_casino_shooting_range"},{"full":"Riverside Casino: 'Hit Your Mark' second reward","vanilla":"Gilded Falcon","node":"riverside_casino_shooting_range"},{"full":"Riverside Casino: 'Slime Smash' chest","vanilla":"Life Vessel","node":"riverside_casino"},{"full":"Riverside Casino: 'Slime Smash' second reward","vanilla":"Gilded Falcon","node":"riverside_casino"},{"full":"Overworld B2: Chest hidden behind musician's house","vanilla":"Strength Tonic","node":"overworld_b2"},{"full":"Overworld B2: Chest near the pond","vanilla":"Herbs","node":"overworld_b2"},{"full":"Overworld B2: First upper mines chest","vanilla":"30 Gilder","node":"overworld_b2_upper_mines"},{"full":"Overworld B2: Chest falling after beating 50 slimes in upper mines","vanilla":"Herbs","node":"overworld_b2_upper_mines"},{"full":"Overworld B2: Chest in house near Coal Mine","vanilla":"Gilded Falcon","node":"overworld_b2_upper_mines"},{"full":"Overworld B2: Chest near Coal Mine back exit","vanilla":"Gilded Falcon","node":"overworld_b2_left"},{"full":"Overworld A4: Chest behind Fire Manor","vanilla":"Strength Elixyr","node":"overworld_a4_behind_manor"},{"full":"Overworld A4: Chest in cave on the way to Fire Manor rewarded for beating circle of fishes","vanilla":"Strength Elixyr","node":"overworld_a4_manor_caves"},{"full":"Overworld A4: Chest in left branch of final cave before Fire Manor","vanilla":"Magic Elixyr","node":"overworld_a4_manor_caves_behind_flail"},{"full":"Fire Manor: Reward chest","vanilla":"Fire Wand","node":"fire_manor"},{"full":"Overworld A3: Elevated chest at top-left corner","vanilla":"Wonder Essence","node":"overworld_a3_left"},{"full":"Overworld A3: Lower chest in left ruins","vanilla":"Gilded Falcon","node":"overworld_a3_left_behind_merman"},{"full":"Overworld A3: Left chest in 3 chests group","vanilla":"30 Gilder","node":"overworld_a3_left_behind_power_glove"},{"full":"Overworld A3: Middle chest in 3 chests group","vanilla":"Strength Elixyr","node":"overworld_a3_left_behind_power_glove"},{"full":"Overworld A3: Right chest in 3 chests group","vanilla":"30 Gilder","node":"overworld_a3_left_behind_power_glove"},{"full":"Overworld A3: Left elevated chest in mimics cave","vanilla":"Gilded Falcon","node":"overworld_a3_mimics_cave"},{"full":"Overworld A3: Right elevated chest in mimics cave","vanilla":"Herbs","node":"overworld_a3_mimics_cave"},{"full":"Overworld A3: Left ground chest in mimics cave","vanilla":"Life Vessel","node":"overworld_a3_mimics_cave"},{"full":"Overworld A3: Right ground chest in mimics cave","vanilla":"Magic Elixyr","node":"overworld_a3_mimics_cave"},{"full":"Overworld A3: Lower chest in right ruins","vanilla":"Herbs","node":"overworld_a3_right"},{"full":"Overworld A3: Chest behind the trees in right ruins","vanilla":"Gilded Falcon","node":"overworld_a3_right_behind_vines"},{"full":"Overworld A3: Elevated chest in middle ruins","vanilla":"Water Book","node":"overworld_a3_right_behind_vines"},{"full":"Overworld A2: Chest dropped by Murggs","vanilla":"Willow Bow","node":"overworld_a2"},{"full":"Overworld A2: Chest in circular cave behind vines","vanilla":"Herbs","node":"overworld_a2_behind_vines"},{"full":"Overworld A2: Left chest in bridge cave with 3 chests","vanilla":"Herbs","node":"overworld_a2_behind_vines_and_bomb"},{"full":"Overworld A2: Middle chest in bridge cave with 3 chests","vanilla":"Strength Elixyr","node":"overworld_a2_behind_vines_and_bomb"},{"full":"Overworld A2: Right chest in bridge cave with 3 chests","vanilla":"30 Gilder","node":"overworld_a2_behind_vines_and_bomb"},{"full":"Overworld A2: Chest near spikeball","vanilla":"Life Vessel","node":"overworld_a2_behind_vines_and_bomb"},{"full":"Overworld A2: Upper chest","vanilla":"Gilded Falcon","node":"overworld_a2_behind_vines_and_bomb"},{"full":"Overworld A2: Lower chest among trees","vanilla":"Strength Tonic","node":"overworld_a2_behind_vines_and_bomb"},{"full":"Overworld A2: Upper chest among trees","vanilla":"Herbs","node":"overworld_a2_behind_vines_and_bomb"},{"full":"Overworld A2: Chest after Stone Golem","vanilla":"Wonder Essence","node":"overworld_a2_behind_vines_and_bomb"},{"full":"Overworld B1: Chest on isolated island","vanilla":"Gilded Falcon","node":"overworld_b1_island"},{"full":"Overworld E1: Chest near bottom right corner","vanilla":"Strength Tonic","node":"overworld_e1"},{"full":"Overworld E1: Chest near top right corner","vanilla":"Gilded Falcon","node":"overworld_e1_behind_spring"},{"full":"Overworld E2: Top chest","vanilla":"Gilded Falcon","node":"overworld_e2_behind_long_boots"},{"full":"Overworld E2: Right chest","vanilla":"30 Gilder","node":"overworld_e2_behind_long_boots"},{"full":"Overworld E2: Bottom chest","vanilla":"Strength Elixyr","node":"overworld_e2_behind_long_boots"},{"full":"Overworld E2: First chest in cave","vanilla":"Sluice Key","node":"overworld_e2_behind_long_boots"},{"full":"Overworld E2: Chest in cave behind burning pillars","vanilla":"Life Vessel","node":"overworld_e2_cave_behind_ice_wand"},{"full":"Overworld E3: Top-right chest in Sand Cape locked ruins","vanilla":"Herbs","node":"overworld_e3_behind_cape_or_boots"},{"full":"Overworld E3: Left chest in desert","vanilla":"30 Gilder","node":"overworld_e3"},{"full":"Overworld E3: Chest on island outside desert","vanilla":"Life Vessel","node":"overworld_e3_bottom_left_island"},{"full":"Overworld E3: Chest on middle ruins","vanilla":"Gilded Falcon","node":"overworld_e3"},{"full":"Overworld E3: Chest in cave","vanilla":"Sand Cape","node":"overworld_e3_cape_cave"},{"full":"Overworld E4: Top-left chest hidden in grass","vanilla":"Gilded Falcon","node":"overworld_e4_behind_merman"},{"full":"Overworld E4: Chest at mid-level near waterfalls","vanilla":"Strength Tonic","node":"overworld_e4_behind_merman"},{"full":"Overworld E4: Chest on left cliff","vanilla":"Wonder Essence","node":"overworld_e4"},{"full":"Overworld E4: Chest in left rocky alcove","vanilla":"Magic Elixyr","node":"overworld_e4"},{"full":"Overworld E4: Left chest in 3 chests group","vanilla":"30 Gilder","node":"overworld_e4"},{"full":"Overworld E4: Middle chest in 3 chests group","vanilla":"30 Gilder","node":"overworld_e4"},{"full":"Overworld E4: Right chest in 3 chests group","vanilla":"30 Gilder","node":"overworld_e4"},{"full":"Overworld E4: Chest between two cliffs","vanilla":"Herbs","node":"overworld_e4"},{"full":"Overworld E4: Chest on right cliff","vanilla":"30 Gilder","node":"overworld_e4"},{"full":"Overworld E4: Lower chest in the well","vanilla":"Strength Elixyr","node":"overworld_e4_well"},{"full":"Overworld E4: Upper chest in the well","vanilla":"Gilded Falcon","node":"overworld_e4_well_behind_vines"},{"full":"Overworld B2: First chest in cave to lake","vanilla":"10 Gilder","node":"overworld_b2_cave_to_lake"},{"full":"Overworld B2: Chest behind deep water in cave to lake","vanilla":"Wonder Essence","node":"overworld_b2_cave_to_lake_behind_merman"},{"full":"Tarn's Manor: Falling chest in dining room after slaying Murggs","vanilla":"Strength Tonic","node":"tarn_manor"},{"full":"Tarn's Manor: Upstairs right chest","vanilla":"Herbs","node":"tarn_manor"},{"full":"Tarn's Manor: First underground chest","vanilla":"Herbs","node":"tarn_manor"},{"full":"Tarn's Manor: Second underground chest","vanilla":"Herbs","node":"tarn_manor"},{"full":"Tarn's Manor: Third underground chest","vanilla":"Gilded Falcon","node":"tarn_manor"},{"full":"Tarn's Manor: Chest in watery hallway with spikeball","vanilla":"Herbs","node":"tarn_manor"},{"full":"Tarn's Manor: Chest in right room coming back from the underground","vanilla":"Life Vessel","node":"tarn_manor"},{"full":"Tarn's Manor: Left chest in final room","vanilla":"Herbs","node":"tarn_manor"},{"full":"Tarn's Manor: Right chest in final room","vanilla":"30 Gilder","node":"tarn_manor"},{"full":"Tarn's Manor: Item on table in final room","vanilla":"Book of Elna","node":"tarn_manor"},{"full":"Coal Mine: Chest #1 in room where Lyman dies","vanilla":"Herbs","node":"coal_mine"},{"full":"Coal Mine: Chest #2 in room where Lyman dies","vanilla":"30 Gilder","node":"coal_mine"},{"full":"Coal Mine: Chest #3 in room where Lyman dies","vanilla":"Herbs","node":"coal_mine"},{"full":"Coal Mine: Chest #4 in room where Lyman dies","vanilla":"30 Gilder","node":"coal_mine"},{"full":"Coal Mine: Elevated chest in room with many minecarts","vanilla":"Herbs","node":"coal_mine"},{"full":"Coal Mine: Lower chest in room with many minecarts","vanilla":"Herbs","node":"coal_mine"},{"full":"Coal Mine: Elevated chest in last sector","vanilla":"Gilded Falcon","node":"coal_mine"},{"full":"Coal Mine: Chest on wooden structure in last minecart starting room","vanilla":"Herbs","node":"coal_mine"},{"full":"Coal Mine: Reward chest for beating the Murggs","vanilla":"Life Vessel","node":"coal_mine"},{"full":"Fairy Pond: First chest in spikeballs pit","vanilla":"Herbs","node":"fairy_pond"},{"full":"Fairy Pond: Second chest in spikeballs pit","vanilla":"Life Vessel","node":"fairy_pond"},{"full":"Fairy Pond: Chest in bubble jumping room","vanilla":"Herbs","node":"fairy_pond"},{"full":"Fairy Pond: Top chest in second chained spikeballs room","vanilla":"Herbs","node":"fairy_pond"},{"full":"Fairy Pond: Middle chest in second chained spikeballs room","vanilla":"Herbs","node":"fairy_pond"},{"full":"Fairy Pond: Bottom chest in second chained spikeballs room","vanilla":"Herbs","node":"fairy_pond"},{"full":"Fairy Pond: Reward chest","vanilla":"Fiend Blade","node":"fairy_pond"},{"full":"Ancient Shrine: Chest in left aisle of main entrance room","vanilla":"Herbs","node":"ancient_shrine"},{"full":"Ancient Shrine: Chest in right aisle of main entrance room","vanilla":"Herbs","node":"ancient_shrine"},{"full":"Ancient Shrine: Chest in room with sandcape holes and jars","vanilla":"Herbs","node":"ancient_shrine_behind_cape"},{"full":"Ancient Shrine: Chest near left exterior statue","vanilla":"Gilded Falcon","node":"ancient_shrine_behind_cape"},{"full":"Ancient Shrine: Left reward chest after beating boss","vanilla":"Sword","node":"ancient_shrine_behind_cape"},{"full":"Ancient Shrine: Middle reward chest after beating boss","vanilla":"Long Boots","node":"ancient_shrine_behind_cape"},{"full":"Ancient Shrine: Right reward chest after beating boss","vanilla":"Life Vessel","node":"ancient_shrine_behind_cape"},{"full":"Coastal Cave: Chest hidden behind bricks near entrance","vanilla":"Herbs","node":"coastal_cave"},{"full":"Coastal Cave: Chest in 'spiral' room","vanilla":"Herbs","node":"coastal_cave"},{"full":"Coastal Cave: Chest reachable by throwing wood log on water near first key chest","vanilla":"Herbs","node":"coastal_cave_behind_merman"},{"full":"Coastal Cave: Chest on floating wooden structure in 3-buttons hub","vanilla":"Herbs","node":"coastal_cave_behind_merman"},{"full":"Coastal Cave: Chest hidden below bricks in 3-buttons seal room","vanilla":"Herbs","node":"coastal_cave"},{"full":"Coastal Cave: Chest in buttons arena","vanilla":"Merman Boots","node":"coastal_cave"},{"full":"Coastal Cave: Chest in room revealed by hitting lever","vanilla":"Gilded Falcon","node":"coastal_cave_behind_merman"},{"full":"Coastal Cave: First chest in room with checkpoint","vanilla":"Life Vessel","node":"coastal_cave_behind_merman"},{"full":"Coastal Cave: Second chest in room with checkpoint","vanilla":"Strength Elixyr","node":"coastal_cave_behind_merman"},{"full":"Coastal Cave: Chest on small island in room with elevated key chest","vanilla":"30 Gilder","node":"coastal_cave_behind_merman"},{"full":"Coastal Cave: Chest reachable by throwing wood log on water near last key chest","vanilla":"Wonder Essence","node":"coastal_cave_behind_merman"},{"full":"Coastal Cave: Left boss reward chest","vanilla":"Water Scroll","node":"coastal_cave_behind_merman"},{"full":"Tower of the Great Tree (basement): Bottom chest","vanilla":"Wonder Essence","node":"great_tree_tower"},{"full":"Tower of the Great Tree (basement): Top-left chest","vanilla":"30 Gilder","node":"great_tree_tower"},{"full":"Tower of the Great Tree (basement): Left chest among the two top chests","vanilla":"Strength Tonic","node":"great_tree_tower"},{"full":"Tower of the Great Tree (basement): Right chest among the two top chests","vanilla":"Herbs","node":"great_tree_tower"},{"full":"Tower of the Great Tree (ground): Chest in arena","vanilla":"1 Gilder","node":"great_tree_tower"},{"full":"Tower of the Great Tree (ground): Chest near left aisle entrance","vanilla":"Herbs","node":"great_tree_tower"},{"full":"Tower of the Great Tree (ground): Chest near right aisle entrance","vanilla":"Herbs","node":"great_tree_tower"},{"full":"Tower of the Great Tree (1F): Middle chest","vanilla":"Wonder Essence","node":"great_tree_tower"},{"full":"Tower of the Great Tree (1F): Left chest in top-right room","vanilla":"Herbs","node":"great_tree_tower"},{"full":"Tower of the Great Tree (1F): Right chest in top-right room","vanilla":"Strength Tonic","node":"great_tree_tower"},{"full":"Tower of the Great Tree (2F): Left chest in top row of storage room","vanilla":"10 Gilder","node":"great_tree_tower"},{"full":"Tower of the Great Tree (2F): Right chest in top row of storage room","vanilla":"Herbs","node":"great_tree_tower"},{"full":"Tower of the Great Tree (2F): Left chest in bottom row of storage room","vanilla":"Herbs","node":"great_tree_tower"},{"full":"Tower of the Great Tree (2F): Right chest in bottom row of storage room","vanilla":"Strength Tonic","node":"great_tree_tower"},{"full":"Tower of the Great Tree (2F): Middle chest","vanilla":"Herbs","node":"great_tree_tower"},{"full":"Tower of the Great Tree (2F): Top chest in bottom-right room","vanilla":"30 Gilder","node":"great_tree_tower"},{"full":"Tower of the Great Tree (2F): Left chest in bottom-right room","vanilla":"1 Gilder","node":"great_tree_tower"},{"full":"Tower of the Great Tree (2F): Right chest in bottom-right room","vanilla":"Life Vessel","node":"great_tree_tower"},{"full":"Tower of the Great Tree (3F): Left chest in top-right room","vanilla":"30 Gilder","node":"great_tree_tower"},{"full":"Tower of the Great Tree (3F): Right chest in top-right room","vanilla":"Herbs","node":"great_tree_tower"},{"full":"Tower of the Great Tree (4F): Chest in fireball launcher room","vanilla":"30 Gilder","node":"great_tree_tower"},{"full":"Tower of the Great Tree (Summit): Left boss reward chest","vanilla":"Agate Crest","node":"great_tree_tower"},{"full":"Tower of the Great Tree (Summit): Right boss reward chest","vanilla":"Garnet Crest","node":"great_tree_tower"},{"full":"Tower of the Great Tree (Branches): Left chest on great tree branches","vanilla":"Life Vessel","node":"great_tree_tower"},{"full":"Tower of the Great Tree (Branches): Right chest on great tree branches","vanilla":"Gilded Falcon","node":"great_tree_tower"},{"full":"Underground Waterway: First chest in entrance room","vanilla":"Life Vessel","node":"underground_waterway"},{"full":"Underground Waterway: Second chest in entrance room","vanilla":"Herbs","node":"underground_waterway"},{"full":"Underground Waterway: Chest on pillar accessible by falling from engine room","vanilla":"Gilded Falcon","node":"underground_waterway"},{"full":"Underground Waterway: Chest in room behind waterfall","vanilla":"Wonder Essence","node":"underground_waterway"},{"full":"Underground Waterway: Chest in last room top-right corner","vanilla":"Herbs","node":"underground_waterway"},{"full":"Lars Crypt: Left chest after bridge","vanilla":"Herbs","node":"lars_crypt"},{"full":"Lars Crypt: Right chest after bridge","vanilla":"Herbs","node":"lars_crypt"},{"full":"Lars Crypt: Chest in zombies' pit","vanilla":"Herbs","node":"lars_crypt"},{"full":"Lars Crypt: Corner chest after climbing stairs from zombies' pit","vanilla":"Herbs","node":"lars_crypt"},{"full":"Lars Crypt: Chest in top-left corner of second pit","vanilla":"Gilded Falcon","node":"lars_crypt"},{"full":"Lars Crypt: Chest at the bottom of moving platforms vertical room","vanilla":"Strength Tonic","node":"lars_crypt"},{"full":"Lars Crypt: Upper boss reward chest","vanilla":"Magic Seed","node":"lars_crypt"},{"full":"Lars Crypt: Middle boss reward chest","vanilla":"Earth Scroll","node":"lars_crypt"},{"full":"Lars Crypt: Lower boss reward chest","vanilla":"Life Vessel","node":"lars_crypt"},{"full":"Lars Crypt: Boss reward chest isolated to the left","vanilla":"Ruby Crest","node":"lars_crypt"},{"full":"Magyscar: Left chest in watery triple chest room","vanilla":"30 Gilder","node":"magyscar"},{"full":"Magyscar: Top-right chest in watery triple chest room","vanilla":"30 Gilder","node":"magyscar"},{"full":"Magyscar: Bottom-right chest in watery triple chest room","vanilla":"Strength Tonic","node":"magyscar"},{"full":"Magyscar: Chest behind vines in switchable platforms room","vanilla":"Gilded Falcon","node":"magyscar_behind_bomb_or_fire_wand"},{"full":"Magyscar: Chest in room with pillars and smashing spikeballs","vanilla":"Life Vessel","node":"magyscar_behind_bomb_or_fire_wand"},{"full":"Magyscar: Elevated chest in small room with spinning spikeballs","vanilla":"Herbs","node":"magyscar_behind_bomb_or_fire_wand"},{"full":"Magyscar: Chest between teleporters","vanilla":"30 Gilder","node":"magyscar_behind_bomb_or_fire_wand"},{"full":"Magyscar: Upper chest in room with elevator controlled by switch","vanilla":"Magic Elixyr","node":"magyscar_behind_bomb_or_fire_wand"},{"full":"Magyscar: Lower hidden chest in room with elevator controlled by switch","vanilla":"Strength Tonic","node":"magyscar_behind_bomb_or_fire_wand"},{"full":"Magyscar: Chest behind vines in room with switch giving torch and lowering platforms","vanilla":"30 Gilder","node":"magyscar_behind_bomb_or_fire_wand"},{"full":"Magyscar: First chest in vines hallway after room with 4 magic switches","vanilla":"Magic Elixyr","node":"magyscar_behind_bomb"},{"full":"Magyscar: Second chest in vines hallway after room with 4 magic switches","vanilla":"Wonder Essence","node":"magyscar_behind_bomb"},{"full":"Magyscar: Third chest in vines hallway after room with 4 magic switches","vanilla":"Strength Elixyr","node":"magyscar_behind_bomb"},{"full":"Magyscar: Right boss reward chest","vanilla":"Wind Scroll","node":"magyscar_behind_bomb"},{"full":"Reptile Lair: Chest in side cavern accessible from overworld","vanilla":"Herbs","node":"reptile_lair_side_cavern"},{"full":"Reptile Lair: Lower chest in main flooded room","vanilla":"Strength Tonic","node":"reptile_lair"},{"full":"Reptile Lair: Left elevated chest in main flooded room","vanilla":"Herbs","node":"reptile_lair"},{"full":"Reptile Lair: Chest on wooden structure to the right of main flooded room","vanilla":"Strength Tonic","node":"reptile_lair_behind_flail"},{"full":"Reptile Lair: Chest in room with 3 respawning lizard statues","vanilla":"Herbs","node":"reptile_lair_behind_flail"},{"full":"Reptile Lair: Chest next to stairs after leaving main flooded room using right stairs","vanilla":"Herbs","node":"reptile_lair_behind_flail"},{"full":"Reptile Lair: Chest next to stairs after moving fireballs room","vanilla":"Strength Tonic","node":"reptile_lair_behind_flail"},{"full":"Reptile Lair: Chest in room with two wooden bridges","vanilla":"Life Vessel","node":"reptile_lair_behind_flail"},{"full":"Reptile Lair: Chest in room with vibrating spikeballs","vanilla":"Gilded Falcon","node":"reptile_lair_behind_flail"},{"full":"Reptile Lair: Left chest in boss reward room","vanilla":"Sapphire Crest","node":"reptile_lair_behind_flail"},{"full":"Reptile Lair: Right chest in boss reward room","vanilla":"Fire Scroll","node":"reptile_lair_behind_flail"},{"full":"Torla Mountain: Chest bathing in lava","vanilla":"Life Vessel","node":"torla_mountain"},{"full":"Torla Mountain: Chest in stompable flamethrowers hallway","vanilla":"Herbs","node":"torla_mountain"},{"full":"Torla Mountain: Chest in top-right corner of room with phoenixes and flamethrowers","vanilla":"Wonder Essence","node":"torla_mountain"},{"full":"Torla Mountain: Right chest in checkpoint teleporter room","vanilla":"Charm Boots","node":"torla_mountain"},{"full":"Torla Mountain: Chest in pit below wooden bridge","vanilla":"Gilded Falcon","node":"torla_mountain_behind_spring"},{"full":"Torla Mountain: Chest before boss","vanilla":"Fire Book","node":"torla_mountain_behind_charm_boots"},{"full":"Torla Mountain: Boss reward chest","vanilla":"Emerald Crest","node":"torla_mountain_behind_charm_boots"},{"full":"Nirude's Lair: Chest hidden in passageway behind statue, accessible from outside","vanilla":"Gilded Falcon","node":"nirude_lair"},{"full":"Nirude's Lair: Chest on left side of cavern hallway with statues","vanilla":"Herbs","node":"nirude_lair"},{"full":"Nirude's Lair: Right elevated chest in entrance room","vanilla":"Herbs","node":"nirude_lair"},{"full":"Overworld E1: Left chest in two chests group","vanilla":"30 Gilder","node":"nirude_lair"},{"full":"Overworld E1: Right chest in two chests group","vanilla":"30 Gilder","node":"nirude_lair"},{"full":"Nirude's Lair: Chest in room with spikes and moving platforms","vanilla":"Herbs","node":"nirude_lair"},{"full":"Overworld E1: Chest on cliff near top-left corner","vanilla":"Earth Book","node":"nirude_lair"},{"full":"Nirude's Lair: Chest hidden behind moving statue","vanilla":"Strength Elixyr","node":"nirude_lair"},{"full":"Nirude's Lair: Upper falling chest in elevated arena room","vanilla":"Life Vessel","node":"nirude_lair"},{"full":"Nirude's Lair: Lower falling chest in elevated arena room","vanilla":"Herbs","node":"nirude_lair"},{"full":"Nirude's Lair: Boss reward chest","vanilla":"Topaz Crest","node":"nirude_lair"},{"full":"Nirude's Lair: Boss reward item given by Miming","vanilla":"Aqua Cape","node":"nirude_lair"},{"full":"Nava's Keep: Chest buried in ground, raising after beating enemies","vanilla":"Gilded Falcon","node":"nava_keep"},{"full":"Nava's Keep: Chest in room with hidden paths","vanilla":"Herbs","node":"nava_keep"},{"full":"Nava's Keep: Elevated chest on Nava's island","vanilla":"Life Vessel","node":"nava_keep"},{"full":"Nava's Keep: Chest left to the house on Nava's island","vanilla":"Wind Book","node":"nava_keep"},{"full":"Nava's Keep: Falling item revealed using Zolist's Stone","vanilla":"Diamond Crest","node":"nava_keep"},{"full":"Merrick's Shop: Item traded for 15 Gilded Falcons","vanilla":"Life Vessel","node":"merrick_shop_1"},{"full":"Merrick's Shop: Item traded for 20 Gilded Falcons","vanilla":"Olga's Ring","node":"merrick_shop_2"},{"full":"Merrick's Shop: Item traded for 25 Gilded Falcons","vanilla":"Life Vessel","node":"merrick_shop_3"},{"full":"Merrick's Shop: Item traded for 30 Gilded Falcons","vanilla":"Silver Armlet","node":"merrick_shop_4"},{"full":"Merrick's Shop: Item traded for 35 Gilded Falcons","vanilla":"Life Vessel","node":"merrick_shop_5"},{"full":"Merrick's Shop: Item traded for 40 Gilded Falcons","vanilla":"Recovery Ring","node":"merrick_shop_6"},{"full":"Merrick's Shop: Item traded for 45 Gilded Falcons","vanilla":"Life Vessel","node":"merrick_shop_7"},{"full":"Merrick's Shop: Item traded for 50 Gilded Falcons","vanilla":"Spirit Wand","node":"merrick_shop_8"},{"full":"Lurvy's Shop: Item #1","vanilla":"Herbs","node":"lurvy_shop_repeatable"},{"full":"Lurvy's Shop: Item #2","vanilla":"Strength Tonic","node":"lurvy_shop_repeatable"},{"full":"Lurvy's Shop: Item #3","vanilla":"Strength Elixyr","node":"lurvy_shop_repeatable"},{"full":"Lurvy's Shop: Item #4","vanilla":"Magic Elixyr","node":"lurvy_shop_repeatable"},{"full":"Lurvy's Shop: Item #5","vanilla":"Leather Armor","node":"lurvy_shop_unique"},{"full":"Lurvy's Shop: Item #5 replacement when bought once","vanilla":"Life Vessel","node":"lurvy_shop_unique"},{"full":"Lurvy's Shop: Item #5 replacement when bought twice","vanilla":"Wonder Essence","node":"lurvy_shop_repeatable"},{"full":"Lurvy's Shop: Item obtained after repairing Broken Armor","vanilla":"Ancient Armor","node":"lurvy_shop_repair"},{"full":"Naomi's Shop: Item #1","vanilla":"Herbs","node":"naomi_shop"},{"full":"Naomi's Shop: Item #2","vanilla":"Strength Tonic","node":"naomi_shop"},{"full":"Naomi's Shop: Item #3","vanilla":"Magic Elixyr","node":"naomi_shop"},{"full":"Naomi's Shop: Item #4","vanilla":"Life Vessel","node":"naomi_shop"},{"full":"Lake Shrine Exterior (ramparts): Chest in red forcefield generator room","vanilla":"Herbs","node":"lake_shrine_exterior_behind_bow"},{"full":"Lake Shrine Exterior (ramparts): Chest in blue forcefield generator room","vanilla":"Herbs","node":"lake_shrine_exterior_behind_bow"},{"full":"Lake Shrine Exterior (ramparts): Left chest behind blue forcefield in left stairway room","vanilla":"Herbs","node":"lake_shrine_exterior_behind_bow"},{"full":"Lake Shrine Exterior (ramparts): Hidden chest in left aisle","vanilla":"Strength Tonic","node":"lake_shrine_exterior_behind_bow"},{"full":"Lake Shrine Exterior (garden): Chest to the left of Lake Shrine Interior gate","vanilla":"Gilded Falcon","node":"lake_shrine_exterior_behind_bow"},{"full":"Lake Shrine Exterior (garden): Chest to the right of Lake Shrine Interior gate","vanilla":"Magic Seed","node":"lake_shrine_exterior_behind_bow"},{"full":"Lake Shrine Interior (0F): Chest in left aisle kitchen opened after solving the dining room riddle","vanilla":"Life Vessel","node":"lake_shrine_interior"},{"full":"Lake Shrine Interior (0F): Elevated chest in left aisle armors room","vanilla":"Strength Tonic","node":"lake_shrine_interior"},{"full":"Lake Shrine Interior (0F): Chest in right aisle library","vanilla":"Herbs","node":"lake_shrine_interior"},{"full":"Lake Shrine Interior (0F): Chest hidden inside armor in right aisle","vanilla":"Herbs","node":"lake_shrine_interior"},{"full":"Lake Shrine Interior (0F): Chest obtained falling from above in right aisle","vanilla":"Wonder Essence","node":"lake_shrine_interior_behind_spring"},{"full":"Lake Shrine Interior (left tower): Chest in left tower stairway","vanilla":"Herbs","node":"lake_shrine_interior"},{"full":"Lake Shrine Interior (1F): Chest inside bedroom with flamethrowers","vanilla":"Magic Elixyr","node":"lake_shrine_interior"},{"full":"Lake Shrine Interior (1F): Chest inside bedroom with 6 switches","vanilla":"Herbs","node":"lake_shrine_interior"},{"full":"Lake Shrine Interior (1F): Chest inside archery trial with 9 orbs","vanilla":"Wonder Essence","node":"lake_shrine_interior"},{"full":"Lake Shrine Interior (1F): Chest hidden below bricks in room with hole","vanilla":"Strength Tonic","node":"lake_shrine_interior_behind_spring"},{"full":"Lake Shrine Interior (balcony): Chest on left aisle balconies","vanilla":"Wonder Essence","node":"lake_shrine_interior"},{"full":"Lake Shrine Interior (balcony): Chest on right aisle balconies","vanilla":"Magic Elixyr","node":"lake_shrine_interior_behind_spring"}]};
+const WORLD = {"paths":[{"fromId":"inoa","toId":"naomi_shop","twoWay":true},{"fromId":"inoa","toId":"inoa_jess_chest","twoWay":true,"requiredItems":["Small Key"]},{"fromId":"inoa","toId":"overworld_c4","twoWay":true},{"fromId":"inoa","toId":"overworld_c2","twoWay":true},{"fromId":"overworld_c2","toId":"overworld_d2","twoWay":true},{"fromId":"overworld_c2","toId":"overworld_c1","twoWay":true},{"fromId":"overworld_c2","toId":"overworld_b2","twoWay":true},{"fromId":"overworld_c2","toId":"lars_crypt","twoWay":true,"requiredItems":["Bouquet"]},{"fromId":"overworld_c2","toId":"overworld_c2_cave_behind_spring","requiredItems":["Spring Bean"]},{"fromId":"overworld_c2_cave_behind_spring","toId":"overworld_c2"},{"fromId":"overworld_c2","toId":"overworld_c2_graveyard_house","twoWay":true,"requiredItems":["Fire Wand"]},{"fromId":"overworld_d2","toId":"overworld_d3","twoWay":true},{"fromId":"overworld_d2","toId":"overworld_d2_watermill","twoWay":true},{"fromId":"overworld_d2","toId":"overworld_d2_behind_spring","requiredItems":["Spring Bean"]},{"fromId":"overworld_d2","toId":"overworld_d2_cave","twoWay":true,"requiredItems":["Bomb"]},{"fromId":"overworld_d2_cave","toId":"overworld_d2_cave_behind_merman","twoWay":true,"requiredItems":["Merman Boots"]},{"fromId":"overworld_d2_behind_spring","toId":"overworld_d2"},{"fromId":"overworld_d2_behind_spring","toId":"overworld_d1","twoWay":true},{"fromId":"overworld_d2_behind_spring","toId":"overworld_c1_elevated_cavern","twoWay":true,"requiredItems":["Fire Wand"]},{"fromId":"overworld_d2_arches","toId":"overworld_d1","twoWay":true},{"fromId":"overworld_d2_arches","toId":"overworld_d2_chest_cliff"},{"fromId":"overworld_d2_chest_cliff","toId":"overworld_d2"},{"fromId":"overworld_d2_arches","toId":"overworld_e2","twoWay":true},{"fromId":"overworld_d3","toId":"overworld_d4","twoWay":true},{"fromId":"overworld_d3","toId":"overworld_d3_behind_vines","twoWay":true,"requiredItems":["Fire Wand"]},{"fromId":"overworld_d3","toId":"overworld_e3_bottom_left","twoWay":true},{"fromId":"overworld_d3","toId":"overworld_e3","twoWay":true,"requiredItems":["Sand Cape"]},{"fromId":"overworld_d3","toId":"overworld_e3_bottom_left_island","twoWay":true,"requiredItems":["Merman Boots"]},{"fromId":"overworld_d3","toId":"overworld_d3_behind_bricks","twoWay":true,"requiredItems":["Iron Flail"]},{"fromId":"overworld_d3","toId":"tarn_manor","twoWay":true},{"fromId":"overworld_d3_behind_vines","toId":"overworld_d3_behind_bricks"},{"fromId":"overworld_d3_behind_bricks","toId":"overworld_d3_behind_spring","requiredItems":["Spring Bean"]},{"fromId":"overworld_d3_behind_spring","toId":"overworld_d3_behind_bricks"},{"fromId":"overworld_d3_behind_spring","toId":"overworld_d3_behind_spring_and_vines","twoWay":true,"requiredItems":["Fire Wand"]},{"fromId":"overworld_d3_behind_spring","toId":"overworld_d3"},{"fromId":"overworld_d4","toId":"overworld_c4","twoWay":true},{"fromId":"overworld_d4","toId":"overworld_d4_behind_long_boots","twoWay":true,"requiredItems":["Long Boots"]},{"fromId":"overworld_d4_behind_long_boots","toId":"overworld_c4_right_cliff_behind_long_boots","twoWay":true},{"fromId":"overworld_d4","toId":"reptile_lair_side_cavern","twoWay":true,"requiredItems":["Merman Boots"]},{"fromId":"overworld_d4","toId":"reptile_lair","requiredItems":["Hunter's Bow","Long Boots","Merman Boots","Bomb"]},{"fromId":"reptile_lair","toId":"reptile_lair_side_cavern","requiredItems":["Bomb"]},{"fromId":"reptile_lair","toId":"reptile_lair_behind_flail","twoWay":true,"requiredItems":["Iron Flail"]},{"fromId":"overworld_c4","toId":"overworld_b4","twoWay":true},{"fromId":"overworld_c4","toId":"coastal_cave","twoWay":true,"requiredItems":["Iron Flail"]},{"fromId":"overworld_c4_behind_long_boots","toId":"overworld_c4_behind_spring","requiredItems":["Spring Bean"]},{"fromId":"overworld_c4_behind_spring","toId":"overworld_c4"},{"fromId":"overworld_c4","toId":"overworld_c4_behind_long_boots","requiredItems":["Long Boots"]},{"fromId":"overworld_c4_behind_long_boots","toId":"overworld_c4"},{"fromId":"overworld_c1_elevated_cavern","toId":"overworld_c1"},{"fromId":"overworld_c1","toId":"overworld_b1","requiredItems":["Iron Flail"]},{"fromId":"overworld_c1","toId":"magyscar","twoWay":true,"requiredItems":["Iron Flail","Bomb"]},{"fromId":"magyscar","toId":"magyscar_behind_bomb_or_fire_wand","requiredItems":["Bomb"]},{"fromId":"magyscar","toId":"magyscar_behind_bomb_or_fire_wand","requiredItems":["Fire Wand"]},{"fromId":"magyscar_behind_bomb_or_fire_wand","toId":"magyscar"},{"fromId":"magyscar_behind_bomb_or_fire_wand","toId":"magyscar_behind_bomb","twoWay":true,"requiredItems":["Bomb"]},{"fromId":"overworld_c1","toId":"overworld_c1_right_sector","requiredItems":["Iron Flail"]},{"fromId":"overworld_c1_right_sector","toId":"overworld_c1"},{"fromId":"overworld_c1_right_sector","toId":"overworld_d1","twoWay":true},{"fromId":"overworld_d1","toId":"overworld_c1_cliff","twoWay":true},{"fromId":"overworld_d1","toId":"overworld_e1_top_left","twoWay":true},{"fromId":"overworld_d1","toId":"torla_mountain","twoWay":true,"requiredItems":["Fire Wand","Ice Wand","Iron Flail"]},{"fromId":"torla_mountain","toId":"torla_mountain_behind_charm_boots","twoWay":true,"requiredItems":["Charm Boots"]},{"fromId":"torla_mountain_behind_charm_boots","toId":"torla_mountain_behind_spring","twoWay":true,"requiredItems":["Spring Bean"]},{"fromId":"overworld_c1_cliff","toId":"overworld_c1"},{"fromId":"overworld_b1","toId":"overworld_c1"},{"fromId":"overworld_b1","toId":"overworld_b2"},{"fromId":"overworld_d1","toId":"overworld_d1_cliff_maze","requiredItems":["Fire Wand"]},{"fromId":"overworld_d1_cliff_maze","toId":"overworld_d1"},{"fromId":"overworld_d1_cliff_maze","toId":"ice_manor","twoWay":true},{"fromId":"overworld_b4","toId":"overworld_b4_behind_merman","twoWay":true,"requiredItems":["Merman Boots"]},{"fromId":"overworld_b4","toId":"overworld_b4_behind_bomb","twoWay":true,"requiredItems":["Bomb"]},{"fromId":"overworld_b4","toId":"overworld_b4_nava_hut_behind_spring","twoWay":true,"requiredItems":["Spring Bean"]},{"fromId":"overworld_b4","toId":"nava_keep","twoWay":true,"requiredItems":["Bomb","Merman Boots","Spring Bean"]},{"fromId":"overworld_b4_behind_bomb","toId":"overworld_a4_right","twoWay":true,"requiredItems":["Bomb"]},{"fromId":"overworld_b4_behind_bomb","toId":"overworld_b3_megalith","twoWay":true,"requiredItems":["Iron Flail"]},{"fromId":"overworld_b4_behind_bomb","toId":"overworld_b3_elevated","twoWay":true,"requiredItems":["Iron Flail"]},{"fromId":"overworld_b3_elevated","toId":"overworld_b3"},{"fromId":"overworld_b3","toId":"overworld_b3_behind_vines","twoWay":true,"requiredItems":["Fire Wand"]},{"fromId":"overworld_b3","toId":"overworld_b3_top_left","twoWay":true,"requiredNodes":["coal_mine"]},{"fromId":"overworld_b3_top_left","toId":"overworld_b2_left","twoWay":true},{"fromId":"overworld_b3_top_left","toId":"overworld_b3_megalith","requiredItems":["Iron Flail"]},{"fromId":"overworld_b3_megalith","toId":"overworld_b3_top_left"},{"fromId":"overworld_b3","toId":"overworld_b3_behind_power_glove","requiredItems":["Power Glove"]},{"fromId":"overworld_b3_behind_power_glove","toId":"overworld_b3"},{"fromId":"overworld_b3","toId":"riverside_casino","twoWay":true,"requiredItems":["Secret Pass"]},{"fromId":"overworld_b3","toId":"overworld_b2","twoWay":true},{"fromId":"overworld_a4_right","toId":"overworld_b4_behind_power_glove","twoWay":true,"requiredItems":["Power Glove"]},{"fromId":"overworld_a4_right","toId":"overworld_a4_middle","twoWay":true,"requiredItems":["Fire Wand"]},{"fromId":"overworld_a4_right","toId":"overworld_a3_right","twoWay":true},{"fromId":"overworld_a4_left","toId":"overworld_a4_middle","twoWay":true,"requiredItems":["Fire Wand"]},{"fromId":"overworld_a4_left","toId":"overworld_a4_manor_caves","twoWay":true,"requiredItems":["Power Glove"]},{"fromId":"overworld_a4_left","toId":"overworld_a3_left","twoWay":true},{"fromId":"fire_manor","toId":"overworld_a4_behind_manor","twoWay":true,"requiredItems":["Fire Wand"]},{"fromId":"fire_manor","toId":"overworld_a4_right"},{"fromId":"fire_manor","toId":"overworld_a4_left"},{"fromId":"overworld_a4_manor_caves","toId":"overworld_a4_manor_caves_behind_flail","requiredItems":["Iron Flail","Merman Boots"]},{"fromId":"overworld_a4_manor_caves_behind_flail","toId":"overworld_a4_manor_caves"},{"fromId":"overworld_a4_manor_caves_behind_flail","toId":"fire_manor","requiredItems":["Spring Bean"]},{"fromId":"fire_manor","toId":"overworld_a4_manor_caves_behind_flail"},{"fromId":"overworld_a4_behind_manor","toId":"overworld_a4_middle"},{"fromId":"overworld_a4_middle","toId":"overworld_a3_megalith","requiredItems":["Power Glove"]},{"fromId":"overworld_a3_right","toId":"overworld_a3_right_behind_vines","requiredItems":["Fire Wand"]},{"fromId":"overworld_a3_right_behind_vines","toId":"overworld_a3_right"},{"fromId":"overworld_a3_right_behind_vines","toId":"overworld_b3_top_left"},{"fromId":"overworld_a3_left","toId":"overworld_a3_left_behind_power_glove","twoWay":true,"requiredItems":["Power Glove"]},{"fromId":"overworld_a3_left","toId":"overworld_a3_mimics_cave","twoWay":true,"requiredItems":["Power Glove","Spring Bean","Fire Wand"]},{"fromId":"overworld_a3_left","toId":"overworld_a3_left_behind_merman","requiredItems":["Merman Boots"]},{"fromId":"overworld_a3_left_behind_power_glove","toId":"overworld_a2","twoWay":true,"requiredItems":["Tree Gem"]},{"fromId":"overworld_a4_middle","toId":"river_network","twoWay":true,"requiredItems":["Merman Boots"]},{"fromId":"overworld_a3_left_behind_merman","toId":"river_network","twoWay":true,"requiredItems":["Merman Boots"]},{"fromId":"overworld_a3_megalith","toId":"river_network","twoWay":true,"requiredItems":["Merman Boots"]},{"fromId":"overworld_a4_right","toId":"river_network","requiredItems":["Merman Boots"]},{"fromId":"overworld_b2","toId":"river_network","requiredItems":["Merman Boots"]},{"fromId":"river_network","toId":"overworld_b4","requiredItems":["Merman Boots"]},{"toId":"river_network","fromId":"fairy_pond","twoWay":true,"requiredItems":["Aqua Cape"]},{"fromId":"overworld_b2","toId":"overworld_b1","requiredItems":["Iron Flail"]},{"fromId":"overworld_b2","toId":"overworld_b2_cave_to_lake","requiredItems":["Bomb"]},{"fromId":"overworld_b2_cave_to_lake","toId":"overworld_b2"},{"fromId":"overworld_b2_cave_to_lake","toId":"overworld_b2_cave_to_lake_behind_merman","twoWay":true,"requiredItems":["Merman Boots"]},{"fromId":"overworld_b2_cave_to_lake_behind_merman","toId":"overworld_b1_left","twoWay":true},{"fromId":"overworld_b2","toId":"overworld_b2_upper_mines","twoWay":true,"requiredItems":["Bomb","Iron Flail"]},{"fromId":"overworld_b2","toId":"coal_mine","twoWay":true,"requiredItems":["Bomb"]},{"fromId":"coal_mine","toId":"overworld_b2_left"},{"fromId":"overworld_a2","toId":"overworld_a2_behind_vines","twoWay":true,"requiredItems":["Fire Wand"]},{"fromId":"overworld_a2_behind_vines","toId":"overworld_a2_behind_vines_and_bomb","twoWay":true,"requiredItems":["Bomb"]},{"fromId":"overworld_a2_behind_vines_and_bomb","toId":"overworld_a2"},{"fromId":"overworld_a2_behind_vines_and_bomb","toId":"overworld_a1","twoWay":true},{"fromId":"overworld_a1","toId":"great_tree_tower","twoWay":true},{"fromId":"overworld_e4","toId":"overworld_e4_well","twoWay":true},{"fromId":"overworld_e4_well","toId":"overworld_e4_well_behind_vines","twoWay":true,"requiredItems":["Fire Wand"]},{"fromId":"overworld_e4","toId":"lurvy_shop_repeatable","twoWay":true},{"fromId":"lurvy_shop_repeatable","toId":"lurvy_shop_unique","twoWay":true},{"fromId":"lurvy_shop_repeatable","toId":"lurvy_shop_repair","twoWay":true,"requiredItems":["Broken Armor"]},{"fromId":"overworld_b1","toId":"overworld_b1_island","requiredItems":["Merman Boots"]},{"fromId":"overworld_b1_island","toId":"overworld_b2","requiredItems":["Merman Boots"]},{"fromId":"overworld_e3_bottom_left","toId":"overworld_e4","twoWay":true,"requiredItems":["Iron Flail"]},{"fromId":"overworld_e4","toId":"overworld_e4_behind_merman","twoWay":true,"requiredItems":["Merman Boots"]},{"fromId":"overworld_e4","toId":"overworld_e3","twoWay":true},{"fromId":"overworld_e3","toId":"overworld_e3_behind_cape_or_boots","requiredItems":["Long Boots"]},{"fromId":"overworld_e3","toId":"overworld_e3_behind_cape_or_boots","requiredItems":["Sand Cape"]},{"fromId":"overworld_e3_behind_cape_or_boots","toId":"overworld_e3"},{"fromId":"overworld_e3","toId":"ancient_shrine","requiredItems":["Sand Cape"]},{"fromId":"overworld_e3","toId":"ancient_shrine","requiredItems":["Long Boots"]},{"fromId":"ancient_shrine","toId":"overworld_e3"},{"fromId":"ancient_shrine","toId":"ancient_shrine_behind_cape","twoWay":true,"requiredItems":["Sand Cape"]},{"fromId":"overworld_e3","toId":"overworld_e3_cape_cave","twoWay":true,"requiredItems":["Sand Cape"]},{"fromId":"overworld_e3","toId":"overworld_e2_behind_long_boots","requiredItems":["Long Boots"]},{"fromId":"overworld_e2_behind_long_boots","toId":"overworld_e3"},{"fromId":"overworld_e2","toId":"overworld_e3"},{"fromId":"overworld_e2","toId":"overworld_e1","twoWay":true},{"fromId":"overworld_e2","toId":"overworld_e2_behind_long_boots","requiredItems":["Long Boots"]},{"fromId":"overworld_e2_behind_long_boots","toId":"overworld_e2"},{"fromId":"overworld_e2_behind_long_boots","toId":"overworld_e2_cave_behind_ice_wand","twoWay":true,"requiredItems":["Ice Wand"]},{"fromId":"riverside_casino","toId":"riverside_casino_shooting_range","twoWay":true,"requiredItems":["Hunter's Bow"]},{"fromId":"coastal_cave","toId":"coastal_cave_behind_merman","twoWay":true,"requiredItems":["Merman Boots"]},{"fromId":"overworld_d2","toId":"underground_waterway","requiredItems":["Merman Boots","Spring Bean"]},{"fromId":"underground_waterway","toId":"overworld_d2","requiredItems":["Merman Boots"]},{"fromId":"underground_waterway","toId":"overworld_e1_left","twoWay":true,"requiredItems":["Merman Boots"]},{"fromId":"overworld_e1_left","toId":"overworld_e1"},{"fromId":"overworld_e1_left","toId":"nirude_lair","twoWay":true,"requiredNodes":["overworld_e1_top_left","overworld_e1_behind_spring"]},{"fromId":"overworld_e1","toId":"overworld_e1_left","requiredItems":["Spring Bean"]},{"fromId":"overworld_e1","toId":"overworld_e1_behind_spring","requiredItems":["Spring Bean"]},{"fromId":"overworld_e1_behind_spring","toId":"overworld_e1"},{"fromId":"overworld_c4","toId":"merrick_shop_1","twoWay":true,"requiredItems":[{"name":"Gilded Falcon","quantity":15}]},{"fromId":"merrick_shop_1","toId":"merrick_shop_2","twoWay":true,"requiredItems":[{"name":"Gilded Falcon","quantity":20}]},{"fromId":"merrick_shop_2","toId":"merrick_shop_3","twoWay":true,"requiredItems":[{"name":"Gilded Falcon","quantity":25}]},{"fromId":"merrick_shop_3","toId":"merrick_shop_4","twoWay":true,"requiredItems":[{"name":"Gilded Falcon","quantity":30}]},{"fromId":"merrick_shop_4","toId":"merrick_shop_5","twoWay":true,"requiredItems":[{"name":"Gilded Falcon","quantity":35}]},{"fromId":"merrick_shop_5","toId":"merrick_shop_6","twoWay":true,"requiredItems":[{"name":"Gilded Falcon","quantity":40}]},{"fromId":"merrick_shop_6","toId":"merrick_shop_7","twoWay":true,"requiredItems":[{"name":"Gilded Falcon","quantity":45}]},{"fromId":"merrick_shop_7","toId":"merrick_shop_8","twoWay":true,"requiredItems":[{"name":"Gilded Falcon","quantity":50}]},{"fromId":"overworld_b1","toId":"crest_ruby","twoWay":true,"requiredItems":["Ruby Crest"]},{"fromId":"overworld_b1","toId":"crest_sapphire","twoWay":true,"requiredItems":["Sapphire Crest"]},{"fromId":"overworld_b1","toId":"crest_topaz","twoWay":true,"requiredItems":["Topaz Crest"]},{"fromId":"overworld_b1","toId":"crest_diamond","twoWay":true,"requiredItems":["Diamond Crest"]},{"fromId":"overworld_b1_left","toId":"crest_emerald","twoWay":true,"requiredItems":["Emerald Crest"]},{"fromId":"overworld_b1","toId":"crest_agate","twoWay":true,"requiredItems":["Agate Crest"]},{"fromId":"overworld_b1_island","toId":"crest_garnet","twoWay":true,"requiredItems":["Garnet Crest"]},{"fromId":"overworld_b1","toId":"lake_shrine_exterior","twoWay":true,"requiredNodes":["crest_ruby","crest_sapphire","crest_topaz","crest_agate","crest_emerald","crest_garnet","crest_diamond"]},{"fromId":"lake_shrine_exterior","toId":"lake_shrine_exterior_behind_bow","twoWay":true,"requiredItems":["Hunter's Bow","Merman Boots"]},{"fromId":"lake_shrine_exterior_behind_bow","toId":"lake_shrine_interior","twoWay":true},{"fromId":"lake_shrine_interior","toId":"lake_shrine_interior_behind_flail","twoWay":true,"requiredItems":["Iron Flail"]},{"fromId":"lake_shrine_interior_behind_flail","toId":"lake_shrine_interior_behind_spring","twoWay":true,"requiredItems":["Spring Bean"]},{"fromId":"lake_shrine_interior_behind_spring","toId":"melzas_fight"},{"fromId":"melzas_fight","toId":"end","requiredItems":["Fire Wand"]}],"items":[{"name":"Nothing"},{"name":"Dagger","slot":1,"tier":0},{"name":"Sword","slot":1,"tier":1},{"name":"Fiend Blade","slot":1,"tier":2},{"name":"Holy Sword","slot":1,"tier":3},{"name":"Hunter's Bow","slot":2,"tier":0},{"name":"Willow Bow","slot":2,"tier":1},{"name":"Spirit Wand","slot":6,"tier":0},{"name":"Legend Sword","slot":1,"tier":4},{"name":"Iron Flail","slot":3,"tier":0},{"name":"Steel Flail","slot":3,"tier":1},{"name":"Sword upgrade","slot":1,"tier":64},{"name":"Flail upgrade","slot":3,"tier":64},{"name":"Bow upgrade","slot":2,"tier":64},{"name":"Ice Wand","slot":4,"tier":0},{"name":"Armor upgrade","slot":7,"tier":64},{"name":"Fire Wand","slot":5,"tier":0},{"name":"Cloth Armor","slot":7,"tier":0},{"name":"Leather Armor","slot":7,"tier":1},{"name":"Ancient Armor","slot":7,"tier":2},{"name":"Silver Armor","slot":7,"tier":3},{"name":"Earth Magic upgrade","slot":16,"tier":64},{"name":"Water Magic upgrade","slot":17,"tier":64},{"name":"Fire Magic upgrade","slot":18,"tier":64},{"name":"Wind Magic upgrade","slot":19,"tier":64},{"name":"Short Boots","slot":9,"tier":0},{"name":"Long Boots","slot":9,"tier":1},{"name":"Merman Boots","slot":9,"tier":2},{"name":"Charm Boots","slot":9,"tier":3},{"name":"Boots upgrade","slot":9,"tier":64},{"name":"Item 0x1E","slot":10,"tier":0},{"name":"Spring Bean","slot":29,"tier":0},{"name":"Sand Cape","slot":26,"tier":0},{"name":"Broken Armor","slot":28,"tier":0},{"name":"Item 0x22","slot":0,"tier":0},{"name":"Bomb","slot":11,"tier":0},{"name":"Herbs","slot":12,"tier":0},{"name":"Strength Elixyr","slot":13,"tier":0},{"name":"Magic Elixyr","slot":15,"tier":0},{"name":"Wonder Essence","slot":30,"tier":0},{"name":"Aqua Cape","slot":27,"tier":0},{"name":"Strength Tonic","slot":14,"tier":0},{"name":"Item 0x2A","slot":15,"tier":2},{"name":"Earth Scroll","slot":16,"tier":0},{"name":"Earth Book","slot":16,"tier":1},{"name":"Water Scroll","slot":17,"tier":0},{"name":"Water Book","slot":17,"tier":1},{"name":"Fire Scroll","slot":18,"tier":0},{"name":"Fire Book","slot":18,"tier":1},{"name":"Wind Scroll","slot":19,"tier":0},{"name":"Wind Book","slot":19,"tier":1},{"name":"Olga's Ring","slot":20,"tier":0},{"name":"Item 0x34","slot":20,"tier":1},{"name":"Silver Armlet","slot":21,"tier":0},{"name":"Nava's Charm","slot":31,"tier":1},{"name":"Recovery Ring","slot":22,"tier":0},{"name":"Item 0x38","slot":22,"tier":1},{"name":"Secret Pass","slot":28,"tier":0},{"name":"Item 0x3A","slot":0,"tier":1},{"name":"Power Glove","slot":23,"tier":0},{"name":"Elevator Key","slot":28,"tier":0},{"name":"Key"},{"name":"Ruby Crest","slot":24,"tier":0},{"name":"Sapphire Crest","slot":24,"tier":1},{"name":"Topaz Crest","slot":24,"tier":2},{"name":"Agate Crest","slot":24,"tier":3},{"name":"Garnet Crest","slot":24,"tier":3},{"name":"Emerald Crest","slot":24,"tier":4},{"name":"Diamond Crest","slot":24,"tier":5},{"name":"1 Gilder","slot":25,"tier":1},{"name":"5 Gilder","slot":25,"tier":2},{"name":"10 Gilder","slot":25,"tier":10},{"name":"30 Gilder","slot":25,"tier":30},{"name":"Sluice Key","slot":28,"tier":0},{"name":"Bouquet","slot":28,"tier":0},{"name":"Small Key","slot":28,"tier":0},{"name":"Jess's Letter","slot":28,"tier":0},{"name":"Tree Gem","slot":28,"tier":0},{"name":"Zolists Stone","slot":28,"tier":0},{"name":"Gilded Falcon"},{"name":"Magic Seed"},{"name":"Item 0x51"},{"name":"Item 0x52"},{"name":"Life Vessel"},{"name":"Item 0x54"},{"name":"Item 0x55"},{"name":"Item 0x56"},{"name":"Book of Runes","slot":28,"tier":0},{"name":"Book of Elna","slot":28,"tier":0},{"name":"Curious Key","slot":28,"tier":0}]};
+const GRAPH = {"cell":{"w":1249.4,"h":961},"locations":[{"id":"inoa","kind":"sector","region":"Inoa","code":"C3","name":"Inoa","col":2,"row":2,"nodes":["inoa","inoa_jess_chest","naomi_shop"],"sources":[0,1,2,269,270,271,272],"maps":["inoa"]},{"id":"overworld-c2-sanctuary-sector","kind":"sector","region":"Overworld C2 (Sanctuary sector)","code":"C2","name":"Sanctuary sector","col":2,"row":1,"nodes":["overworld_c2","overworld_c2_cave_behind_spring","overworld_c2_graveyard_house"],"sources":[],"maps":["world"]},{"id":"overworld-c2-sanctuary-sector--sanctuary","kind":"cave","region":"Overworld C2 (Sanctuary sector)","name":"Sanctuary & caves","nodes":["overworld_c2","overworld_c2_graveyard_house","overworld_c2_cave_behind_spring"],"sources":[3,4,5,6],"maps":["sanctuary"],"x":3230,"y":1700,"parent":"overworld-c2-sanctuary-sector"},{"id":"lars-crypt","kind":"dungeon","region":"Lars Crypt","name":"Lars Crypt","nodes":["lars_crypt"],"sources":[194,195,196,197,198,199,200,201,202,203],"maps":["lars"],"x":3555,"y":1160,"parent":"overworld-c2-sanctuary-sector"},{"id":"overworld-b2-coal-mine-sector","kind":"sector","region":"Overworld B2 (Coal Mine sector)","code":"B2","name":"Coal Mine sector","col":1,"row":1,"nodes":["overworld_b2","overworld_b2_left","overworld_b2_cave_to_lake","overworld_b2_cave_to_lake_behind_merman","overworld_b2_upper_mines"],"sources":[61,62,66],"maps":["world"]},{"id":"overworld-b2-coal-mine-sector--coalarea","kind":"cave","region":"Overworld B2 (Coal Mine sector)","name":"Coal Mine area caves","nodes":["overworld_b2_upper_mines","overworld_b2_cave_to_lake","overworld_b2_cave_to_lake_behind_merman"],"sources":[63,64,65,117,118],"maps":["coalarea"],"x":1560,"y":1075,"parent":"overworld-b2-coal-mine-sector"},{"id":"coal-mine","kind":"dungeon","region":"Coal Mine","name":"Coal Mine","nodes":["coal_mine"],"sources":[129,130,131,132,133,134,135,136,137],"maps":["coal"],"x":2090,"y":1240,"parent":"overworld-b2-coal-mine-sector"},{"id":"overworld-d2-watermill-sector","kind":"sector","region":"Overworld D2 (Watermill sector)","code":"D2","name":"Watermill sector","col":3,"row":1,"nodes":["overworld_d2","overworld_d2_behind_spring","overworld_d2_chest_cliff","overworld_d2_arches","overworld_d2_watermill","overworld_d2_cave","overworld_d2_cave_behind_merman"],"sources":[7,8,9],"maps":["world"]},{"id":"overworld-d2-watermill-sector--watermill","kind":"cave","region":"Overworld D2 (Watermill sector)","name":"Watermill & caverns","nodes":["overworld_d2_watermill","overworld_d2_cave","overworld_d2_cave_behind_merman"],"sources":[11,12,13,14,15,16,17],"maps":["watermill"],"x":4630,"y":1700,"side":"l","parent":"overworld-d2-watermill-sector"},{"id":"overworld-d2-watermill-sector--waterway","kind":"cave","region":"Overworld D2 (Watermill sector)","name":"Waterway (D2 side)","nodes":["overworld_d2"],"sources":[10],"maps":["waterway"],"x":5000,"y":1790,"parent":"overworld-e2-upper-desert"},{"id":"undeground-waterway","kind":"dungeon","region":"Undeground Waterway","name":"Underground Waterway","nodes":["underground_waterway"],"sources":[189,190,191,192,193],"maps":["waterway"],"x":5045,"y":1640,"parent":"overworld-e2-upper-desert"},{"id":"overworld-d3-tarn-manor-sector","kind":"sector","region":"Overworld D3 (Tarn Manor sector)","code":"D3","name":"Tarn Manor sector","col":3,"row":2,"nodes":["overworld_d3","overworld_d3_behind_vines","overworld_d3_behind_bricks","overworld_d3_behind_spring","overworld_d3_behind_spring_and_vines"],"sources":[18,19,20,21,22,23,24,25,26],"maps":["world"]},{"id":"tarn-manor","kind":"dungeon","region":"Tarn Manor","name":"Tarn Manor","nodes":["tarn_manor"],"sources":[119,120,121,122,123,124,125,126,127,128],"maps":["tarn"],"x":4340,"y":2060,"parent":"overworld-d3-tarn-manor-sector"},{"id":"overworld-c4-merrick-s-shop-sector","kind":"sector","region":"Overworld C4 (Merrick's shop sector)","code":"C4","name":"Merrick's shop sector","col":2,"row":3,"nodes":["overworld_c4","overworld_c4_behind_spring","overworld_c4_behind_long_boots","overworld_c4_right_cliff_behind_long_boots"],"sources":[32,33,34,35,36,37],"maps":["world"]},{"id":"merrick-s-shop","kind":"shop","region":"Merrick's shop","name":"Merrick's shop","nodes":["merrick_shop_1","merrick_shop_2","merrick_shop_3","merrick_shop_4","merrick_shop_5","merrick_shop_6","merrick_shop_7","merrick_shop_8"],"sources":[253,254,255,256,257,258,259,260],"maps":["world"],"x":3380,"y":3370,"parent":"overworld-c4-merrick-s-shop-sector"},{"id":"coastal-cave","kind":"dungeon","region":"Coastal Cave","name":"Coastal Cave","nodes":["coastal_cave","coastal_cave_behind_merman"],"sources":[152,153,154,155,156,157,158,159,160,161,162,163],"maps":["coastal"],"x":3340,"y":3610,"parent":"overworld-c4-merrick-s-shop-sector"},{"id":"overworld-d4-reptile-lair-sector","kind":"sector","region":"Overworld D4 (Reptile Lair sector)","code":"D4","name":"Reptile Lair sector","col":3,"row":3,"nodes":["overworld_d4","overworld_d4_behind_long_boots"],"sources":[27,28,29,30,31],"maps":["world"]},{"id":"reptile-lair","kind":"dungeon","region":"Reptile Lair","name":"Reptile Lair","nodes":["reptile_lair_side_cavern","reptile_lair","reptile_lair_behind_flail"],"sources":[218,219,220,221,222,223,224,225,226,227,228],"maps":["reptile"],"x":4610,"y":3200,"parent":"overworld-d4-reptile-lair-sector"},{"id":"overworld-b3-riverside-sector","kind":"sector","region":"Overworld B3 (Riverside sector)","code":"B3","name":"Riverside sector","col":1,"row":2,"nodes":["overworld_b3","overworld_b3_elevated","overworld_b3_behind_vines","overworld_b3_behind_power_glove","overworld_b3_megalith","overworld_b3_top_left"],"sources":[52,53,54],"maps":["world"]},{"id":"riverside-casino","kind":"place","region":"Riverside Casino","name":"Riverside Casino","nodes":["riverside_casino","riverside_casino_shooting_range"],"sources":[55,56,57,58,59,60],"maps":["casino"],"x":1910,"y":2600,"parent":"overworld-b3-riverside-sector"},{"id":"fairy-pond","kind":"place","region":"Fairy Pond","name":"Fairy Pond","nodes":["fairy_pond"],"sources":[138,139,140,141,142,143,144],"maps":["fairy"],"x":905,"y":2900,"parent":"overworld-a4-fire-manor-sector"},{"id":"overworld-b4-nava-s-cabin-sector","kind":"sector","region":"Overworld B4 (Nava's cabin sector)","code":"B4","name":"Nava's cabin sector","col":1,"row":3,"nodes":["overworld_b4","overworld_b4_behind_merman","overworld_b4_behind_bomb","overworld_b4_behind_power_glove","overworld_b4_nava_hut_behind_spring"],"sources":[48,49,50],"maps":["world"]},{"id":"overworld-b4-nava-s-cabin-sector--navacabin","kind":"cave","region":"Overworld B4 (Nava's cabin sector)","name":"Nava's cabin","nodes":["overworld_b4_nava_hut_behind_spring"],"sources":[51],"maps":["navacabin"],"x":1700,"y":3620,"side":"l","parent":"overworld-b4-nava-s-cabin-sector"},{"id":"nava-s-keep","kind":"dungeon","region":"Nava's Keep","name":"Nava's Keep","nodes":["nava_keep"],"sources":[248,249,250,251,252],"maps":["nava"],"x":1870,"y":3720,"parent":"overworld-b4-nava-s-cabin-sector"},{"id":"overworld-e4-cliffs-of-madness","kind":"sector","region":"Overworld E4 (Cliffs of Madness)","code":"E4","name":"Cliffs of Madness","col":4,"row":3,"nodes":["overworld_e4","overworld_e4_well","overworld_e4_well_behind_vines","overworld_e4_behind_merman","lurvy_shop_repeatable","lurvy_shop_unique","lurvy_shop_repair"],"sources":[106,107,108,109,110,111,112,113,114],"maps":["world"]},{"id":"overworld-e4-cliffs-of-madness--cliffs","kind":"cave","region":"Overworld E4 (Cliffs of Madness)","name":"Well & Lurvy","nodes":["overworld_e4_well","overworld_e4_well_behind_vines","lurvy_shop_repeatable","lurvy_shop_unique","lurvy_shop_repair"],"sources":[115,116,261,262,263,264,265,266,267,268],"maps":["cliffs"],"x":6150,"y":3700,"side":"l","parent":"overworld-e4-cliffs-of-madness"},{"id":"overworld-e3-lower-desert","kind":"sector","region":"Overworld E3 (Lower desert)","code":"E3","name":"Lower desert","col":4,"row":2,"nodes":["overworld_e3","overworld_e3_bottom_left","overworld_e3_bottom_left_island","overworld_e3_cape_cave","overworld_e3_behind_cape_or_boots"],"sources":[101,102,103,104],"maps":["world"]},{"id":"overworld-e3-lower-desert--deserts","kind":"cave","region":"Overworld E3 (Lower desert)","name":"Despair Desert S cave","nodes":["overworld_e3_cape_cave"],"sources":[105],"maps":["deserts"],"x":5230,"y":2050,"parent":"overworld-e3-lower-desert"},{"id":"overworld-e2-upper-desert","kind":"sector","region":"Overworld E2 (Upper desert)","code":"E2","name":"Upper desert","col":4,"row":1,"nodes":["overworld_e2","overworld_e2_behind_long_boots","overworld_e2_cave_behind_ice_wand"],"sources":[96,97,98],"maps":["world"]},{"id":"overworld-e2-upper-desert--desertn","kind":"cave","region":"Overworld E2 (Upper desert)","name":"Despair Desert N caves","nodes":["overworld_e2_behind_long_boots","overworld_e2_cave_behind_ice_wand"],"sources":[99,100],"maps":["desertn"],"x":5130,"y":1080,"parent":"overworld-e2-upper-desert"},{"id":"ancient-shrine","kind":"dungeon","region":"Ancient Shrine","name":"Ancient Shrine","nodes":["ancient_shrine","ancient_shrine_behind_cape"],"sources":[145,146,147,148,149,150,151],"maps":["shrine"],"x":6080,"y":2770,"side":"l","parent":"overworld-e3-lower-desert"},{"id":"overworld-c1-magyscar-sector","kind":"sector","region":"Overworld C1 (Magyscar sector)","code":"C1","name":"Magyscar sector","col":2,"row":0,"nodes":["overworld_c1","overworld_c1_right_sector","overworld_c1_elevated_cavern","overworld_c1_cliff"],"sources":[38,39,40,41,42,43],"maps":["world"]},{"id":"magyscar","kind":"dungeon","region":"Magyscar","name":"Magyscar","nodes":["magyscar","magyscar_behind_bomb_or_fire_wand","magyscar_behind_bomb"],"sources":[204,205,206,207,208,209,210,211,212,213,214,215,216,217],"maps":["magyscar"],"x":3125,"y":70,"parent":"overworld-c1-magyscar-sector"},{"id":"overworld-d1-torla-sector","kind":"sector","region":"Overworld D1 (Torla sector)","code":"D1","name":"Torla sector","col":3,"row":0,"nodes":["overworld_d1","overworld_d1_cliff_maze"],"sources":[44,45,46],"maps":["world"]},{"id":"torla-mountain","kind":"dungeon","region":"Torla Mountain","name":"Torla Mountain","nodes":["torla_mountain","torla_mountain_behind_charm_boots","torla_mountain_behind_spring"],"sources":[229,230,231,232,233,234,235],"maps":["torla"],"x":4775,"y":40,"parent":"overworld-d1-torla-sector"},{"id":"ice-manor","kind":"dungeon","region":"Ice Manor","name":"Ice Manor","nodes":["ice_manor"],"sources":[47],"maps":["ice"],"x":3940,"y":650,"parent":"overworld-d1-torla-sector"},{"id":"overworld-e1-nirude-sector","kind":"sector","region":"Overworld E1 (Nirude sector)","code":"E1","name":"Nirude sector","col":4,"row":0,"nodes":["overworld_e1","overworld_e1_behind_spring","overworld_e1_left","overworld_e1_top_left"],"sources":[94,95],"maps":["world"]},{"id":"nirude-s-lair","kind":"dungeon","region":"Nirude's Lair","name":"Nirude's Lair","nodes":["nirude_lair"],"sources":[236,237,238,241,243,244,245,246,247,239,240,242],"maps":["nirude","world"],"x":5610,"y":240,"parent":"overworld-e1-nirude-sector"},{"id":"overworld-a3-ruins-above-fire-manor","kind":"sector","region":"Overworld A3 (Ruins above Fire Manor)","code":"A3","name":"Ruins above Fire Manor","col":0,"row":2,"nodes":["overworld_a3_left","overworld_a3_left_behind_power_glove","overworld_a3_left_behind_merman","overworld_a3_mimics_cave","overworld_a3_megalith","overworld_a3_right","overworld_a3_right_behind_vines"],"sources":[71,72,73,74,75,80,81,82],"maps":["world"]},{"id":"overworld-a3-ruins-above-fire-manor--mimics","kind":"cave","region":"Overworld A3 (Ruins above Fire Manor)","name":"Ruins & Mimics cave","nodes":["overworld_a3_mimics_cave"],"sources":[76,77,78,79],"maps":["mimics"],"x":205,"y":2430,"parent":"overworld-a3-ruins-above-fire-manor"},{"id":"overworld-a4-fire-manor-sector","kind":"sector","region":"Overworld A4 (Fire Manor sector)","code":"A4","name":"Fire Manor sector","col":0,"row":3,"nodes":["overworld_a4_right","overworld_a4_middle","overworld_a4_left","overworld_a4_manor_caves","overworld_a4_manor_caves_behind_flail","overworld_a4_behind_manor"],"sources":[],"maps":["world"]},{"id":"overworld-a4-fire-manor-sector--firemanor","kind":"cave","region":"Overworld A4 (Fire Manor sector)","name":"Fire Manor grounds","nodes":["overworld_a4_behind_manor","overworld_a4_manor_caves","overworld_a4_manor_caves_behind_flail"],"sources":[67,68,69],"maps":["firemanor"],"x":560,"y":3590,"parent":"overworld-a4-fire-manor-sector"},{"id":"fire-manor","kind":"dungeon","region":"Fire Manor","name":"Fire Manor","nodes":["fire_manor"],"sources":[70],"maps":["firemanor"],"x":515,"y":3300,"parent":"overworld-a4-fire-manor-sector"},{"id":"overworld-a1-murgg-great-tree","kind":"sector","region":"Overworld A1 (Murgg great tree)","code":"A1","name":"Murgg great tree","col":0,"row":0,"nodes":["overworld_a1"],"sources":[],"maps":["world"]},{"id":"overworld-a2-murgg-woods","kind":"sector","region":"Overworld A2 (Murgg woods)","code":"A2","name":"Murgg woods","col":0,"row":1,"nodes":["overworld_a2","overworld_a2_behind_vines","overworld_a2_behind_vines_and_bomb"],"sources":[83,88,89,90,91],"maps":["world"]},{"id":"overworld-a2-murgg-woods--murgg","kind":"cave","region":"Overworld A2 (Murgg woods)","name":"Murgg Woods caves","nodes":["overworld_a2_behind_vines","overworld_a2_behind_vines_and_bomb"],"sources":[84,85,86,87,92],"maps":["murgg"],"x":765,"y":1530,"parent":"overworld-a2-murgg-woods"},{"id":"tower-of-the-great-tree","kind":"dungeon","region":"Tower of the Great Tree","name":"Tower of the Great Tree","nodes":["great_tree_tower"],"sources":[164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188],"maps":["tower","world"],"x":620,"y":650,"parent":"overworld-a1-murgg-great-tree"},{"id":"overworld-b1-lake-sector","kind":"sector","region":"Overworld B1 (Lake sector)","code":"B1","name":"Lake sector","col":1,"row":0,"nodes":["overworld_b1","overworld_b1_island","overworld_b1_left","crest_ruby","crest_sapphire","crest_topaz","crest_agate","crest_emerald","crest_garnet","crest_diamond"],"sources":[93],"maps":["world"]},{"id":"lake-shrine","kind":"dungeon","region":"Lake Shrine","name":"Lake Shrine","nodes":["lake_shrine_exterior","lake_shrine_exterior_behind_bow","lake_shrine_interior","lake_shrine_interior_behind_flail","lake_shrine_interior_behind_spring","melzas_fight","end"],"sources":[273,274,275,276,277,278,279,280,281,282,283,284,285,286,287,288,289,290],"maps":["lakeint","lakeext"],"x":1900,"y":140,"parent":"overworld-b1-lake-sector"},{"id":"river-network","kind":"hub","region":"River network","name":"River network","nodes":["river_network"],"sources":[],"maps":[],"x":1690,"y":3340,"parent":"overworld-b4-nava-s-cabin-sector"}],"edges":[["inoa","overworld-c4-merrick-s-shop-sector"],["inoa","overworld-c2-sanctuary-sector"],["overworld-c2-sanctuary-sector","overworld-d2-watermill-sector"],["overworld-c2-sanctuary-sector","overworld-c1-magyscar-sector"],["overworld-c2-sanctuary-sector","overworld-b2-coal-mine-sector"],["overworld-c2-sanctuary-sector","lars-crypt"],["overworld-d2-watermill-sector","overworld-d3-tarn-manor-sector"],["overworld-d2-watermill-sector","overworld-d1-torla-sector"],["overworld-d2-watermill-sector","overworld-c1-magyscar-sector"],["overworld-d2-watermill-sector","overworld-e2-upper-desert"],["overworld-d3-tarn-manor-sector","overworld-d4-reptile-lair-sector"],["overworld-d3-tarn-manor-sector","overworld-e3-lower-desert"],["overworld-d3-tarn-manor-sector","tarn-manor"],["overworld-d4-reptile-lair-sector","overworld-c4-merrick-s-shop-sector"],["overworld-d4-reptile-lair-sector","reptile-lair"],["overworld-c4-merrick-s-shop-sector","overworld-b4-nava-s-cabin-sector"],["overworld-c4-merrick-s-shop-sector","coastal-cave"],["overworld-c1-magyscar-sector","overworld-b1-lake-sector"],["overworld-c1-magyscar-sector","magyscar"],["overworld-c1-magyscar-sector","overworld-d1-torla-sector"],["overworld-d1-torla-sector","overworld-e1-nirude-sector"],["overworld-d1-torla-sector","torla-mountain"],["overworld-b1-lake-sector","overworld-b2-coal-mine-sector"],["overworld-d1-torla-sector","ice-manor"],["overworld-b4-nava-s-cabin-sector","nava-s-keep"],["overworld-b4-nava-s-cabin-sector","overworld-a4-fire-manor-sector"],["overworld-b4-nava-s-cabin-sector","overworld-b3-riverside-sector"],["overworld-b3-riverside-sector","overworld-b2-coal-mine-sector"],["overworld-b3-riverside-sector","riverside-casino"],["overworld-a4-fire-manor-sector","overworld-a3-ruins-above-fire-manor"],["fire-manor","overworld-a4-fire-manor-sector"],["overworld-a3-ruins-above-fire-manor","overworld-b3-riverside-sector"],["overworld-a3-ruins-above-fire-manor","overworld-a2-murgg-woods"],["overworld-a4-fire-manor-sector","river-network"],["overworld-a3-ruins-above-fire-manor","river-network"],["overworld-b2-coal-mine-sector","river-network"],["river-network","overworld-b4-nava-s-cabin-sector"],["fairy-pond","river-network"],["overworld-b2-coal-mine-sector","coal-mine"],["overworld-a2-murgg-woods","overworld-a1-murgg-great-tree"],["overworld-a1-murgg-great-tree","tower-of-the-great-tree"],["overworld-e3-lower-desert","overworld-e4-cliffs-of-madness"],["overworld-e3-lower-desert","ancient-shrine"],["overworld-e3-lower-desert","overworld-e2-upper-desert"],["overworld-e2-upper-desert","overworld-e1-nirude-sector"],["overworld-d2-watermill-sector","undeground-waterway"],["undeground-waterway","overworld-e1-nirude-sector"],["overworld-e1-nirude-sector","nirude-s-lair"],["overworld-c4-merrick-s-shop-sector","merrick-s-shop"],["overworld-b1-lake-sector","lake-shrine"],["overworld-c2-sanctuary-sector","overworld-c2-sanctuary-sector--sanctuary"],["overworld-b2-coal-mine-sector","overworld-b2-coal-mine-sector--coalarea"],["overworld-d2-watermill-sector","overworld-d2-watermill-sector--watermill"],["overworld-e2-upper-desert","overworld-d2-watermill-sector--waterway"],["overworld-b4-nava-s-cabin-sector","overworld-b4-nava-s-cabin-sector--navacabin"],["overworld-e4-cliffs-of-madness","overworld-e4-cliffs-of-madness--cliffs"],["overworld-e3-lower-desert","overworld-e3-lower-desert--deserts"],["overworld-e2-upper-desert","overworld-e2-upper-desert--desertn"],["overworld-a3-ruins-above-fire-manor","overworld-a3-ruins-above-fire-manor--mimics"],["overworld-a4-fire-manor-sector","overworld-a4-fire-manor-sector--firemanor"],["overworld-a2-murgg-woods","overworld-a2-murgg-woods--murgg"]]};
+// Reachability logic of the randomizer, ported from RandomizerWorld / WorldSolver so the tracker page can run offline.
+// `world` is { paths, items }: world_path.json and item.json as shipped in the randomizer.
+
+const SPAWN_NODE = 'inoa';
+const END_NODE = 'end';
+const UPGRADE_SLOTS = {
+    'Sword upgrade': 1, 'Bow upgrade': 2, 'Flail upgrade': 3, 'Armor upgrade': 7,
+    'Earth Magic upgrade': 16, 'Water Magic upgrade': 17, 'Fire Magic upgrade': 18, 'Wind Magic upgrade': 19,
+};
+const CREST_NODES = {
+    'Ruby Crest': 'crest_ruby', 'Sapphire Crest': 'crest_sapphire', 'Topaz Crest': 'crest_topaz', 'Agate Crest': 'crest_agate',
+    'Emerald Crest': 'crest_emerald', 'Garnet Crest': 'crest_garnet', 'Diamond Crest': 'crest_diamond',
+};
+
+/**
+ * @param settings { progressiveItems, splitBootsEffects, skipLastDungeon, magyscarRequiresBomb, usedCrests: [crest item names] }
+ * @returns the paths with their requirements adjusted the same way the randomizer does for a given seed
+ */
+function buildPaths(world, settings) {
+    const paths = world.paths.map(p => ({
+        from: p.fromId,
+        to: p.toId,
+        twoWay: !!p.twoWay,
+        items: (p.requiredItems || []).flatMap(i => typeof i === 'string' ? [i] : Array(i.quantity).fill(i.name)),
+        nodes: [...(p.requiredNodes || [])],
+    }));
+
+    if (settings.progressiveItems) {
+        const slots = { ...UPGRADE_SLOTS };
+        if (!settings.splitBootsEffects) slots['Boots upgrade'] = 9;
+        for (const [upgrade, slot] of Object.entries(slots)) {
+            const toConvert = world.items.filter(i => i.slot === slot && i.tier !== 64);
+            for (const path of paths) {
+                let highestTier = 0;
+                for (const item of toConvert) {
+                    const at = path.items.indexOf(item.name);
+                    if (at >= 0) {
+                        path.items.splice(at, 1);
+                        highestTier = Math.max(highestTier, (item.tier + 1) & 0xFF);
+                    }
+                }
+                for (let i = 0; i < highestTier; i++) path.items.push(upgrade);
+            }
+        }
+    }
+
+    // Crests that are not in the seed are not required to reach the Lake Shrine
+    const toLake = paths.find(p => p.from === 'overworld_b1' && p.to === 'lake_shrine_exterior');
+    for (const [crest, node] of Object.entries(CREST_NODES)) {
+        if (!settings.usedCrests.includes(crest)) toLake.nodes = toLake.nodes.filter(n => n !== node);
+    }
+
+    if (!settings.magyscarRequiresBomb) {
+        const intoMagyscar = paths.find(p => p.from === 'overworld_c1' && p.to === 'magyscar');
+        intoMagyscar.items = intoMagyscar.items.filter(i => i !== 'Bomb');
+    }
+    if (settings.skipLastDungeon) {
+        paths.push({ from: 'lake_shrine_exterior', to: 'melzas_fight', twoWay: false, items: [], nodes: [] });
+    }
+    return paths;
+}
+
+/** @param inventory Map-like object { itemName: count }. @returns Set of the node ids the player can reach. */
+function exploreNodes(paths, inventory) {
+    const explored = new Set([SPAWN_NODE]);
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const p of paths) {
+            const fromHere = explored.has(p.from), fromThere = p.twoWay && explored.has(p.to);
+            if ((!fromHere && !fromThere) || (explored.has(p.from) && explored.has(p.to))) continue;
+            if (!p.nodes.every(n => explored.has(n))) continue;
+            const need = {};
+            for (const i of p.items) need[i] = (need[i] || 0) + 1;
+            if (!Object.entries(need).every(([name, n]) => (inventory[name] || 0) >= n)) continue;
+            explored.add(fromHere ? p.to : p.from);
+            changed = true;
+        }
+    }
+    return explored;
+}
+
+/** Every item name (and the largest count) that some path asks for: what the tracker lets the player count. */
+function requiredItemCounts(paths) {
+    const max = {};
+    for (const p of paths) {
+        const need = {};
+        for (const i of p.items) need[i] = (need[i] || 0) + 1;
+        for (const [name, n] of Object.entries(need)) max[name] = Math.max(max[name] || 0, n);
+    }
+    return max;
+}
+
+if (typeof module !== 'undefined') module.exports = { buildPaths, exploreNodes, requiredItemCounts, END_NODE };
+
+const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const CREST_NAMES = Object.keys(CREST_NODES);
+const DEFAULT_SETTINGS = { progressiveItems: true, splitBootsEffects: true, skipLastDungeon: true, magyscarRequiresBomb: true, usedCrests: CREST_NAMES };
+const DEFAULT_START = ['Dagger', 'Cloth Armor', 'Short Boots'];
+
+// Same storage as the v3 tracker, so progress carries over between the two pages
+const STORE_KEY = 'alundra-tracker-v3';
+const store = {
+  get() { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { return {}; } },
+  set(v) { try { localStorage.setItem(STORE_KEY, JSON.stringify(v)); } catch (e) {} },
+};
+const mapById = Object.fromEntries(ATLAS.maps.map(m => [m.id, m]));
+const WORLD_MAP = mapById.world;
+const { w: CW, h: CH } = GRAPH.cell;
+const locById = Object.fromEntries(GRAPH.locations.map(l => [l.id, l]));
+const sectors = GRAPH.locations.filter(l => l.kind === 'sector');
+const pinned = GRAPH.locations.filter(l => l.kind !== 'sector');
+const keyOf = i => `${ATLAS.sources[i].full} (${ATLAS.sources[i].vanilla})`;
+const neighbours = {};
+GRAPH.edges.forEach(([a, b]) => { (neighbours[a] = neighbours[a] || []).push(b); (neighbours[b] = neighbours[b] || []).push(a); });
+const KIND_LABEL = { sector: 'overworld sector', cave: 'cave', dungeon: 'dungeon', shop: 'shop', place: 'place', hub: 'underground river' };
+
+// ---- state
+let saved = store.get();               // { spoiler: raw text, collected: [i], manual: {item: n} }
+let contents = {};                     // source index -> item name, from the spoiler
+let seed = null;
+let settings = DEFAULT_SETTINGS, startItems = DEFAULT_START, paths = buildPaths(WORLD, DEFAULT_SETTINGS);
+let collected = new Set(saved.collected || []);
+let manual = saved.manual || {};
+let spoilers = false, reach = new Set(), explored = new Set();
+let here = null, curMap = null;        // the location open, or null for the world overview
+const views = { overview: { x: 0, y: 0, k: 1 }, detail: { x: 0, y: 0, k: 1 } };
+const persist = () => store.set({ spoiler: saved.spoiler, collected: [...collected], manual });
+
+function loadSpoiler(text) {
+  const json = JSON.parse(text);
+  if (!json.itemSources) throw new Error('This file has no "itemSources": use the spoiler.json written by the randomizer.');
+  const flat = {};
+  for (const region of Object.values(json.itemSources)) Object.assign(flat, region);
+  contents = {}; let matched = 0;
+  ATLAS.sources.forEach((_, i) => { const it = flat[keyOf(i)]; if (it) { contents[i] = it; matched++; } });
+  seed = json;
+  const gs = json.gameSettings || {}, rs = json.randomizerSettings || {};
+  const all = new Set(Object.values(contents));
+  settings = {
+    progressiveItems: gs.progressiveItems !== false, splitBootsEffects: gs.splitBootsEffects !== false,
+    skipLastDungeon: gs.skipLastDungeon !== false, magyscarRequiresBomb: !!rs.magyscarRequiresBomb,
+    usedCrests: CREST_NAMES.filter(c => all.has(c)),
+  };
+  startItems = rs.startingInventory || DEFAULT_START;
+  paths = buildPaths(WORLD, settings);
+  return matched;
+}
+
+function inventory() {
+  const inv = {};
+  const add = (n, c = 1) => { inv[n] = (inv[n] || 0) + c; };
+  startItems.forEach(n => add(n));
+  collected.forEach(i => { if (contents[i]) add(contents[i]); });
+  for (const [n, c] of Object.entries(manual)) add(n, c);
+  return inv;
+}
+
+function recompute() {
+  const inv = inventory();
+  explored = exploreNodes(paths, inv);
+  reach = new Set(ATLAS.sources.map((s, i) => i).filter(i => explored.has(ATLAS.sources[i].node)));
+  return inv;
+}
+const stateOf = i => collected.has(i) ? 'done' : reach.has(i) ? 'reach' : 'lock';
+const shownItem = i => contents[i] && (spoilers || collected.has(i)) ? contents[i] : null;
+const shortName = i => ATLAS.sources[i].full.replace(/^[^:]+: /, '');
+function locStats(l) {
+  const left = l.sources.filter(i => !collected.has(i));
+  return { total: l.sources.length, left: left.length, open: left.filter(i => reach.has(i)).length, reached: l.nodes.some(n => explored.has(n)) };
+}
+const locTitle = l => l.kind === 'sector' ? `${l.code} · ${l.name}` : l.name;
+const countState = s => !s.total ? 'none' : !s.left ? 'cleared' : s.open ? 'open' : 'left';
+const countText = s => !s.total ? '' : !s.left ? '✓' : String(s.open || s.left);
+
+// ---- rendering
+function render() {
+  const inv = recompute();
+  renderStatus();
+  renderInventory(inv);
+  renderAvail();
+  renderCrumbs();
+  if (here) { renderMarkers(); renderExits(); } else { renderOverview(); renderWhereToGo(); }
+}
+
+function renderStatus() {
+  const total = ATLAS.sources.length, left = [...reach].filter(i => !collected.has(i)).length;
+  const seedText = seed ? `Seed <b>${esc(seed.hashSentence || seed.permalink || 'loaded')}</b>` : 'No seed loaded: you can still set items by hand';
+  $('status').innerHTML = `${seedText}<br><b>${left}</b> reachable chests left · <b>${collected.size}</b>/${total} collected · game beatable: <b>${explored.has(END_NODE) ? 'yes' : 'not yet'}</b>`;
+}
+
+function renderInventory(inv) {
+  const wanted = requiredItemCounts(paths);
+  const names = Object.keys(wanted).sort((a, b) => (CREST_NAMES.includes(a) - CREST_NAMES.includes(b)) || a.localeCompare(b));
+  const box = $('inv'); box.innerHTML = '';
+  for (const n of names) {
+    const total = inv[n] || 0;
+    const d = document.createElement('div'); d.className = 'it' + (total ? ' has' : '');
+    d.innerHTML = `<span title="${esc(n)}${wanted[n] > 1 ? ` (some paths need ${wanted[n]})` : ''}">${esc(n)}</span><div><button>−</button><span class="n">${total}</span><button>+</button></div>`;
+    const [minus, plus] = d.querySelectorAll('button');
+    minus.onclick = () => { if ((inv[n] || 0) > 0) { manual[n] = (manual[n] || 0) - 1; persist(); render(); } };
+    plus.onclick = () => { manual[n] = (manual[n] || 0) + 1; persist(); render(); };
+    box.append(d);
+  }
+}
+
+function renderAvail() {
+  const on = spoilers && seed;
+  $('availSec').style.display = on ? '' : 'none';
+  if (!on) return;
+  const counts = {};
+  [...reach].filter(i => !collected.has(i) && contents[i]).forEach(i => counts[contents[i]] = (counts[contents[i]] || 0) + 1);
+  const rows = Object.entries(counts).sort((a, b) => a[0].localeCompare(b[0]));
+  $('avail').innerHTML = rows.length ? rows.map(([n, c]) => `<div><span>${esc(n)}</span><span>${c}</span></div>`).join('') : '<div>Nothing reachable and uncollected.</div>';
+}
+
+function renderCrumbs() {
+  const h = $('crumbs'); h.innerHTML = '';
+  const el = (tag, cls, text) => { const e = document.createElement(tag); e.className = cls; e.textContent = text; h.append(e); return e; };
+  if (!here) {
+    el('span', 'here', 'World');
+    const legend = el('span', 'legend', '');
+    legend.innerHTML = '<span><i style="background:#4cc2ff">3</i>can open now</span><span><i style="background:#555;color:#ddd">5</i>left, locked</span><span><i style="background:var(--g)">✓</i>done</span>'
+      + '<span><i style="border-color:var(--cave)"></i>cave</span><span><i style="border-color:var(--dungeon)"></i>dungeon</span><span><i style="border-color:var(--shop)"></i>shop</span><span>dark = can\'t get there yet · dashed = underground link</span>';
+    el('span', 'hint', 'Click a pin or sector to open it · drag · scroll to zoom');
+    return;
+  }
+  el('button', 'crumb', 'World').onclick = () => go(null);
+  const parent = here.parent && locById[here.parent];
+  if (parent) { el('span', 'sep', '›'); el('button', 'crumb', locTitle(parent)).onclick = () => go(parent.id); }
+  el('span', 'sep', '›'); el('span', 'here', locTitle(here));
+  if (here.maps.length > 1) {
+    const tabs = el('div', 'tabs', '');
+    here.maps.forEach(m => {
+      const b = document.createElement('button'); b.className = m === curMap ? 'on' : '';
+      const n = here.sources.filter(i => ATLAS.placements[i].map === m).length;
+      b.textContent = `${mapById[m].title} (${n})`;
+      b.onclick = () => go(here.id, m);
+      tabs.append(b);
+    });
+  }
+  el('span', 'hint', 'Click a chest to mark it collected · Esc for the world');
+}
+
+// ---- world overview: sectors, pins, underground links
+const cellCenter = l => [(l.col + 0.5) * CW, (l.row + 0.5) * CH];
+const anchorOf = l => l.kind === 'sector' ? cellCenter(l) : [l.x, l.y];
+
+function renderOverview() {
+  const stats = Object.fromEntries(GRAPH.locations.map(l => [l.id, locStats(l)]));
+
+  const cells = $('cells'); cells.innerHTML = '';
+  for (const l of sectors) {
+    const s = stats[l.id];
+    const c = document.createElement('div');
+    c.className = 'cellz' + (s.reached ? '' : ' fog');
+    c.style.cssText = `left:${l.col * CW}px;top:${l.row * CH}px;width:${CW}px;height:${CH}px`;
+    const chip = document.createElement('div'); chip.className = 'chip' + (s.reached ? '' : ' fog');
+    chip.style.left = 'calc(18px * var(--inv))'; chip.style.top = 'calc(14px * var(--inv))';
+    chip.innerHTML = `<b></b>${s.total ? `<span class="cnt ${countState(s)}">${countText(s)}</span>` : ''}`;
+    chip.children[0].textContent = l.code;
+    c.append(chip);
+    c.onmouseenter = c.onmousemove = e => locTip(e, l, s);
+    c.onmouseleave = hideTip;
+    c.onclick = () => { if (!moved) go(l.id); };
+    cells.append(c);
+  }
+
+  // Links that leave a sector: the river, the waterway, dungeons reached from the next sector
+  const svgEl = $('links');
+  svgEl.setAttribute('width', WORLD_MAP.w); svgEl.setAttribute('height', WORLD_MAP.h);
+  svgEl.innerHTML = '';
+  for (const [a, b] of GRAPH.edges) {
+    const A = locById[a], B = locById[b];
+    if (A.kind === 'sector' && B.kind === 'sector') continue;
+    if (A.kind === 'sector' ? B.parent === A.id : B.kind === 'sector' && A.parent === B.id) continue;
+    const [x1, y1] = anchorOf(A), [x2, y2] = anchorOf(B);
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    Object.entries({ x1, y1, x2, y2 }).forEach(([k, v]) => line.setAttribute(k, v));
+    line.setAttribute('vector-effect', 'non-scaling-stroke');
+    if (stats[a].reached && stats[b].reached) line.setAttribute('class', 'open');
+    svgEl.append(line);
+  }
+
+  const pins = $('pins'); pins.innerHTML = '';
+  for (const l of pinned) {
+    const s = stats[l.id];
+    const p = document.createElement('div');
+    p.className = `pin ${l.kind} ${countState(s)}${s.reached ? '' : ' unreached'}${l.side === 'l' ? ' l' : ''}`;
+    p.style.left = l.x + 'px'; p.style.top = l.y + 'px'; p.dataset.id = l.id; p.style.pointerEvents = 'auto';
+    p.innerHTML = `<span class="dot">${countText(s) || (l.kind === 'hub' ? '≈' : '')}</span><span class="lbl"></span>`;
+    p.lastChild.textContent = l.name;
+    p.onpointerdown = e => e.stopPropagation();
+    p.onmouseenter = p.onmousemove = e => locTip(e, l, s);
+    p.onmouseleave = hideTip;
+    p.onclick = () => go(l.id);
+    pins.append(p);
+  }
+}
+
+function locTip(e, l, s) {
+  const lines = [`<b>${esc(locTitle(l))}</b> <small>(${KIND_LABEL[l.kind]})</small>`];
+  if (!s.reached) lines.push("You can't get here yet");
+  lines.push(s.total ? `${s.open} reachable · ${s.left} left · ${s.total} total` : 'No chests here');
+  const links = (neighbours[l.id] || []).map(id => locById[id]).filter(n => n.kind !== 'sector' || n.id !== l.parent);
+  if (links.length && l.kind !== 'sector') lines.push('Leads to: ' + esc(links.map(locTitle).join(', ')));
+  if (spoilers && seed) {
+    const items = l.sources.filter(i => !collected.has(i) && reach.has(i) && contents[i]).map(i => contents[i]);
+    if (items.length) lines.push('<i>' + esc(items.join(', ')) + '</i>');
+  }
+  showTip(e, lines.join('<br>'));
+}
+
+// Overview side list: where reachable chests are waiting
+function renderWhereToGo() {
+  $('exitSec').style.display = 'none';
+  const open = GRAPH.locations.map(l => ({ l, s: locStats(l) })).filter(r => r.s.open).sort((a, b) => b.s.open - a.s.open);
+  $('listTitle').textContent = open.length ? `Chests you can open now, in ${open.length} places` : 'No reachable chests left';
+  const list = $('srcs'); list.innerHTML = '';
+  for (const { l, s } of open) {
+    const d = document.createElement('div'); d.className = 'loc';
+    d.innerHTML = `<span><span></span><br><small>${s.left} left of ${s.total}${l.kind !== 'sector' && l.parent ? ' · in ' + esc(locById[l.parent].code) : ''}</small></span><span class="n">${s.open}</span>`;
+    d.firstChild.firstChild.textContent = locTitle(l);
+    d.onclick = () => go(l.id);
+    d.onmouseenter = () => flashPin(l);
+    list.append(d);
+  }
+  if (!open.length) list.innerHTML = '<div class="empty">Find more items, or add them by hand above.</div>';
+}
+
+function flashPin(l) {
+  const p = document.querySelector(`.pin[data-id="${l.id}"]`);
+  if (!p) return; p.classList.remove('flash'); void p.offsetWidth; p.classList.add('flash');
+}
+
+// ---- location map
+function renderMarkers() {
+  const mk = $('markers'); mk.innerHTML = '';
+  const list = $('srcs'); list.innerHTML = '';
+  const order = { reach: 0, lock: 1, done: 2 };
+  const ids = here.sources.filter(i => ATLAS.placements[i].map === curMap).sort((a, b) => order[stateOf(a)] - order[stateOf(b)]);
+  const s = locStats(here);
+  $('listTitle').textContent = s.total ? `${s.open} reachable · ${s.left} left · ${s.total} chests` : 'No chests here';
+  ids.forEach(i => {
+    const p = ATLAS.placements[i], st = stateOf(i);
+    if ((st === 'lock' && !$('showLocked').checked) || (st === 'done' && !$('showDone').checked)) return;
+    const m = document.createElement('div');
+    m.className = `mk ${st} c${p.c}`; m.style.left = p.x + 'px'; m.style.top = p.y + 'px'; m.dataset.i = i; m.style.pointerEvents = 'auto';
+    m.onmouseenter = m.onmousemove = e => chestTip(e, i);
+    m.onmouseleave = hideTip;
+    m.onpointerdown = e => e.stopPropagation();
+    m.onclick = () => toggle(i);
+    mk.append(m);
+
+    const row = document.createElement('div'); row.className = 'src ' + st;
+    const item = shownItem(i);
+    row.innerHTML = `<b></b><span></span>`;
+    row.firstChild.textContent = shortName(i);
+    row.lastChild.textContent = (item ? item : st === 'done' ? 'collected' : st === 'reach' ? 'reachable' : 'locked') + ' · double-click to toggle';
+    row.onclick = () => flashChest(i);
+    row.ondblclick = () => toggle(i);
+    list.append(row);
+  });
+  // This location's chests on its other maps
+  here.maps.filter(m => m !== curMap).forEach(m => {
+    const n = here.sources.filter(i => ATLAS.placements[i].map === m);
+    const d = document.createElement('div'); d.className = 'loc';
+    d.innerHTML = `<span><span></span><br><small>${n.filter(i => !collected.has(i)).length} left of ${n.length} on this map</small></span>`;
+    d.firstChild.firstChild.textContent = '→ ' + mapById[m].title;
+    d.onclick = () => go(here.id, m);
+    list.append(d);
+  });
+}
+
+function renderExits() {
+  $('exitSec').style.display = '';
+  const box = $('exits'); box.innerHTML = '';
+  const ids = [...new Set(neighbours[here.id] || [])];
+  // A sector also leads to every pin inside it
+  if (here.kind === 'sector') pinned.filter(l => l.parent === here.id).forEach(l => { if (!ids.includes(l.id)) ids.push(l.id); });
+  if (!ids.length) { box.innerHTML = '<span class="row">Nothing</span>'; return; }
+  ids.map(id => locById[id]).sort((a, b) => (a.kind === 'sector') - (b.kind === 'sector') || a.name.localeCompare(b.name)).forEach(l => {
+    const s = locStats(l);
+    const b = document.createElement('button');
+    b.innerHTML = `<span></span>${s.open ? ` <b>${s.open}</b>` : ''}`;
+    b.firstChild.textContent = locTitle(l);
+    if (!s.reached) b.style.opacity = .55;
+    b.onclick = () => go(l.id);
+    box.append(b);
+  });
+}
+
+function chestTip(e, i) {
+  const st = stateOf(i), item = shownItem(i);
+  showTip(e, `<b>${esc(shortName(i))}</b><br>${esc({ reach: 'Reachable', lock: 'Locked: you are missing something', done: 'Collected' }[st])}${item ? `<br>Contains: <b>${esc(item)}</b>` : ''}<br><small>click to ${collected.has(i) ? 'un-collect' : 'mark collected'}</small>`);
+}
+function showTip(e, html) {
+  if (drag && moved) return;
+  const t = $('tip'); t.innerHTML = html; t.style.display = 'block';
+  const x = Math.min(e.clientX + 14, innerWidth - t.offsetWidth - 6), y = Math.min(e.clientY + 14, innerHeight - t.offsetHeight - 6);
+  t.style.left = x + 'px'; t.style.top = y + 'px';
+}
+const hideTip = () => { $('tip').style.display = 'none'; };
+
+function toggle(i) {
+  if (collected.has(i)) collected.delete(i); else collected.add(i);
+  persist(); render();
+}
+
+function flashChest(i) {
+  const m = document.querySelector(`.mk[data-i="${i}"]`); if (!m) return;
+  const p = ATLAS.placements[i], r = stage.getBoundingClientRect(), v = views.detail;
+  v.k = Math.max(v.k, 0.6);
+  v.x = r.width / 2 - p.x * v.k; v.y = r.height / 2 - p.y * v.k; applyView();
+  m.classList.remove('hl'); void m.offsetWidth; m.classList.add('hl');
+}
+
+// ---- navigation: #loc=<id>&map=<map>, so the browser's back button works
+function go(id, map) {
+  const want = id ? `#loc=${encodeURIComponent(id)}${map ? `&map=${encodeURIComponent(map)}` : ''}` : '';
+  if (location.hash.slice(1) !== want.slice(1)) location.hash = want || '#'; else route();
+}
+function route() {
+  const q = new URLSearchParams(location.hash.slice(1));
+  const l = locById[q.get('loc')] || null;
+  hideTip();
+  const prev = here ? here.id + '/' + curMap : 'overview';
+  here = l && l.maps.length ? l : null;
+  curMap = here ? (here.maps.includes(q.get('map')) ? q.get('map') : here.maps[0]) : null;
+  const next = here ? here.id + '/' + curMap : 'overview';
+  $('world').className = here ? 'detail' : 'overview';
+  const m = here ? mapById[curMap] : WORLD_MAP;
+  const img = $('img'), w = $('world');
+  img.width = m.w; img.height = m.h;
+  const fit = () => { here ? fitDetail() : fitOverview(); w.style.visibility = 'visible'; };
+  const g = $('grid'); g.innerHTML = '';
+  if (here && m.id === 'world') {
+    for (let c = 0; c < 5; c++) for (let r = 0; r < 4; r++) {
+      const i = document.createElement('i'); i.style.cssText = `left:${c * CW}px;top:${r * CH}px;width:${CW}px;height:${CH}px`; g.append(i);
+      const b = document.createElement('b'); b.textContent = 'ABCDE'[c] + (r + 1); b.style.cssText = `left:${c * CW + 14}px;top:${r * CH + 8}px`; g.append(b);
+    }
+  }
+  render();
+  if (img.getAttribute('src') !== '../v2/maps/' + m.file) {
+    w.style.visibility = 'hidden';
+    img.onload = () => { if (prev !== next || !fitted[next]) fit(); fitted[next] = true; };
+    img.src = '../v2/maps/' + m.file;
+  } else if (prev !== next || !fitted[next]) { fit(); fitted[next] = true; } else applyView();
+}
+const fitted = {};
+addEventListener('hashchange', route);
+
+// ---- pan / zoom
+const stage = $('stage');
+const curView = () => here ? views.detail : views.overview;
+function applyView() {
+  const v = curView(), w = $('world');
+  w.style.transform = `translate(${v.x}px,${v.y}px) scale(${v.k})`; w.style.setProperty('--inv', 1 / v.k);
+}
+function fitBox(v, x0, y0, x1, y1, pad) {
+  const r = stage.getBoundingClientRect();
+  v.k = Math.min((r.width - 2 * pad) / (x1 - x0), (r.height - 2 * pad) / (y1 - y0));
+  v.x = (r.width - (x1 - x0) * v.k) / 2 - x0 * v.k;
+  v.y = (r.height - (y1 - y0) * v.k) / 2 - y0 * v.k;
+  applyView();
+}
+function fitOverview() { fitBox(views.overview, 0, 0, WORLD_MAP.w, WORLD_MAP.h, 4); }
+function fitDetail() {
+  const m = mapById[curMap];
+  if (m.id !== 'world') return fitBox(views.detail, 0, 0, m.w, m.h, 10);
+  // On the overworld, frame this location's chests (and a sector's own grid cell)
+  const pts = here.sources.map(i => ATLAS.placements[i]).filter(p => p.map === 'world');
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const addPt = (x, y) => { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); };
+  pts.forEach(p => addPt(p.x, p.y));
+  if (here.kind === 'sector') { addPt(here.col * CW, here.row * CH); addPt((here.col + 1) * CW, (here.row + 1) * CH); }
+  if (x0 === Infinity) return fitBox(views.detail, 0, 0, m.w, m.h, 10);
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, hw = Math.max(x1 - x0 + 160, 900) / 2, hh = Math.max(y1 - y0 + 160, 700) / 2;
+  fitBox(views.detail, cx - hw, cy - hh, cx + hw, cy + hh, 6);
+}
+let drag = null, moved = false;
+stage.onpointerdown = e => { const v = curView(); drag = { x: e.clientX - v.x, y: e.clientY - v.y, sx: e.clientX, sy: e.clientY }; moved = false; stage.classList.add('drag'); };
+addEventListener('pointerup', () => { drag = null; stage.classList.remove('drag'); });
+addEventListener('pointermove', e => {
+  if (!drag) return;
+  if (!moved && Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) > 4) { moved = true; hideTip(); }
+  if (!moved) return;
+  const v = curView(); v.x = e.clientX - drag.x; v.y = e.clientY - drag.y; applyView();
+});
+stage.addEventListener('wheel', e => {
+  e.preventDefault(); const v = curView(), r = stage.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, f = Math.exp(-e.deltaY * 0.0015);
+  v.x = mx - (mx - v.x) * f; v.y = my - (my - v.y) * f; v.k *= f; applyView();
+}, { passive: false });
+addEventListener('resize', () => here ? fitDetail() : fitOverview());
+addEventListener('keydown', e => { if (e.key === 'Escape' && here && !e.target.closest('input')) go(null); });
+
+// ---- controls
+function acceptSpoiler(text) {
+  try {
+    const matched = loadSpoiler(text);
+    saved.spoiler = text; collected = new Set(); manual = {}; persist();
+    if (matched < ATLAS.sources.length) alert(`Only ${matched} of ${ATLAS.sources.length} item sources were found in this file.`);
+    render();
+  } catch (e) { alert('Could not read this file: ' + e.message); }
+}
+const drop = $('drop');
+drop.onclick = () => $('file').click();
+$('file').onchange = e => { const f = e.target.files[0]; if (f) f.text().then(acceptSpoiler); };
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) f.text().then(acceptSpoiler); };
+$('spoil').onchange = e => { spoilers = e.target.checked; render(); };
+$('showLocked').onchange = $('showDone').onchange = render;
+$('reset').onclick = () => { if (confirm('Clear collected chests and manual item counts for this seed?')) { collected = new Set(); manual = {}; persist(); render(); } };
+// Another tab (or the v3 page) changed the shared progress
+addEventListener('storage', e => {
+  if (e.key !== STORE_KEY) return;
+  saved = store.get(); collected = new Set(saved.collected || []); manual = saved.manual || {};
+  if (saved.spoiler) { try { loadSpoiler(saved.spoiler); } catch (err) {} }
+  render();
+});
+
+if (saved.spoiler) { try { loadSpoiler(saved.spoiler); } catch (e) { saved.spoiler = null; } }
+route();
+</script>
+</body>
+</html>

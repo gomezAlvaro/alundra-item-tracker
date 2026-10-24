@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alundra World Tracker</title>
+<style>
+:root{--bg:#1b1c20;--panel:#25272d;--text:#e9e9ec;--muted:#9a9ca4;--border:#3a3d46;--accent:#4cc2ff;--done:#6fd88a;--cave:#e0a050;--dungeon:#c08cff;--shop:#f2d230;--hub:#5fd0e0;--g:#3ecf5a;--y:#f2d230;--r:#ef4b4b}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#e9e7e1;--panel:#fff;--text:#222;--muted:#6b6b6b;--border:#d4d0c4;--accent:#0a7fc2;--done:#2f9a4d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:13px/1.4 system-ui,sans-serif;display:flex;height:100vh;overflow:hidden}
+main{flex:1;display:flex;flex-direction:column;min-width:0}
+aside{background:var(--panel);display:flex;flex-direction:column;min-height:0;width:340px;border-left:1px solid var(--border)}
+header{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--border);min-height:44px;flex-wrap:wrap}
+header .crumb{background:none;border:0;color:var(--accent);cursor:pointer;font:inherit;padding:2px 4px;border-radius:4px}
+header .crumb:hover{background:var(--bg)}
+header .here{font-weight:600}
+header .sep{color:var(--muted)}
+header .hint{margin-left:auto;color:var(--muted);font-size:12px}
+.tabs{display:flex;gap:4px;margin-left:12px;flex-wrap:wrap}
+.tabs button{padding:3px 9px;border:1px solid var(--border);border-radius:12px;background:var(--bg);color:var(--text);cursor:pointer;font:inherit;font-size:12px}
+.tabs button.on{border-color:var(--accent);color:var(--accent)}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 6px}
+.list{overflow:auto;flex:1}
+#stage{flex:1;position:relative;overflow:hidden;background:#000;cursor:grab;touch-action:none}
+#stage.drag{cursor:grabbing}
+#world{position:absolute;left:0;top:0;transform-origin:0 0}
+#world img{display:block;image-rendering:pixelated;max-width:none}
+#world.overview .detail,#world.detail .overview{display:none}
+.layer{position:absolute;inset:0}
+.grid{pointer-events:none}
+.grid i{position:absolute;border:1px solid rgba(255,255,255,.35)}
+.grid b{position:absolute;color:#fff;font-size:calc(40px*var(--inv));text-shadow:0 0 6px #000;opacity:.7}
+/* overview: sectors, links and pins */
+.cellz{position:absolute;border:1px solid rgba(255,255,255,.28);cursor:pointer;transition:background .15s}
+.cellz:hover{background:rgba(76,194,255,.10);border-color:rgba(76,194,255,.7)}
+.cellz.fog{background:rgba(0,0,0,.58)}
+.cellz.fog:hover{background:rgba(0,0,0,.45)}
+.chip{position:absolute;transform:scale(var(--inv));transform-origin:0 0;display:flex;align-items:center;gap:7px;background:#000c;color:#fff;border-radius:8px;padding:4px 9px 4px 8px;white-space:nowrap;pointer-events:none;font-size:13px}
+.chip b{font-size:17px}
+.chip span{opacity:.85}
+.chip .cnt,.dot{font-weight:700;color:#000}
+.chip .cnt{border-radius:10px;padding:0 7px;font-size:12px;background:#555;color:#ddd}
+.chip .cnt.open{background:#4cc2ff;color:#000}
+.chip .cnt.cleared{background:var(--g);color:#000}
+.fog .chip,.chip.fog{opacity:.75}
+#links{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+#links line{stroke:#9aa;stroke-width:2.5;stroke-dasharray:7 6;opacity:.8}
+#links line.open{stroke:#4cc2ff;opacity:.95}
+.pin{position:absolute;width:0;height:0;transform:scale(var(--inv));transform-origin:0 0;cursor:pointer;z-index:1}
+.pin:hover{z-index:3}
+.pin .dot{position:absolute;left:-15px;top:-15px;width:30px;height:30px;border-radius:50%;border:3px solid var(--dungeon);background:#555;display:grid;place-items:center;font-size:13px;box-shadow:0 0 0 2px #000,0 0 10px #000}
+.pin.cave .dot{border-color:var(--cave)}
+.pin.shop .dot,.pin.place .dot{border-color:var(--shop)}
+.pin.hub .dot{border-color:var(--hub);background:#123}
+.pin.open .dot{background:#4cc2ff}
+.pin.left .dot{color:#ddd}
+.pin.cleared .dot{background:var(--g)}
+.pin .lbl{position:absolute;left:19px;top:-11px;white-space:nowrap;background:#000d;color:#fff;padding:2px 7px;border-radius:5px;font-size:12.5px}
+.pin.l .lbl{left:auto;right:19px}
+.pin.unreached{opacity:.55}
+.pin.unreached .lbl{color:#bbb}
+.pin:hover .lbl{background:#4cc2ff;color:#000}
+.pin.flash .dot{animation:pinflash .9s 2}
+@keyframes pinflash{50%{transform:scale(1.8)}}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin-left:10px;color:var(--muted);font-size:12px}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend i{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;font-style:normal;font-weight:700;font-size:10px;color:#000;border:2px solid #888}
+/* location map: chests */
+.mk{position:absolute;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;border:3px solid var(--g);transform:scale(var(--inv));box-shadow:0 0 0 2px #000,0 0 8px #000;cursor:pointer;display:grid;place-items:center;font-size:12px;font-weight:700;color:#000}
+.mk.cy{border-color:var(--y)}.mk.cr{border-color:var(--r)}
+.mk.reach{background:#4cc2ff}
+.mk.lock{background:#555;opacity:.45}
+.mk.done{background:#222;color:#8f8;opacity:.6}
+.mk.done::after{content:"✓"}
+.mk.hl{animation:pulse 1s 3}
+@keyframes pulse{50%{transform:scale(calc(var(--inv)*2.2))}}
+#tip{position:fixed;pointer-events:none;background:#000e;color:#fff;padding:6px 9px;border-radius:6px;font-size:12px;z-index:5;display:none;max-width:300px}
+.sec{padding:10px 14px;border-bottom:1px solid var(--border)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;color:var(--muted);font-size:12px}
+.row label{display:flex;gap:4px;align-items:center;cursor:pointer}
+button.act{padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);cursor:pointer;font:inherit}
+#drop{border:1px dashed var(--border);border-radius:8px;padding:10px;text-align:center;color:var(--muted);cursor:pointer}
+#drop.over{border-color:var(--accent);color:var(--accent)}
+#status{font-size:12px;color:var(--muted);margin-top:6px}
+#status b{color:var(--text)}
+.inv{display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;max-height:190px;overflow:auto}
+.it{display:flex;justify-content:space-between;align-items:center;gap:4px}
+.it span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.it.has span{color:var(--accent)}
+.it button{width:20px;height:20px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);cursor:pointer;padding:0;line-height:1}
+.it .n{min-width:18px;text-align:center}
+.listhead{padding:8px 14px 4px}
+.src,.loc{padding:6px 14px;border-top:1px solid var(--border);cursor:pointer}
+.src:hover,.loc:hover{background:var(--bg)}
+.src b{font-weight:500;display:block}
+.src span{color:var(--muted);font-size:12px}
+.src.reach b::before{content:"● ";color:var(--accent)}
+.src.lock b::before{content:"○ ";color:var(--muted)}
+.src.lock{opacity:.6}
+.src.done b::before{content:"✓ ";color:var(--done)}
+.src.done{opacity:.5}
+.loc{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.loc small{color:var(--muted)}
+.loc .n{background:var(--accent);color:#000;font-weight:700;border-radius:9px;padding:0 7px;font-size:12px}
+.exits{display:flex;flex-wrap:wrap;gap:5px}
+.exits button{padding:3px 8px;border:1px solid var(--border);border-radius:12px;background:var(--bg);color:var(--text);cursor:pointer;font:inherit;font-size:12px}
+.exits button:hover{border-color:var(--accent)}
+.exits button b{color:var(--accent)}
+.empty{padding:10px 14px;color:var(--muted)}
+#avail div{display:flex;justify-content:space-between;font-size:12px}
+@media (max-width:900px){aside{width:270px}}
+@media (max-width:700px){body{flex-direction:column;height:auto;overflow:auto}main{height:70vh;flex:none}aside{width:auto;border-left:0;border-top:1px solid var(--border)}#legend{display:none}}
+</style>
+</head>
+<body>
+<main>
+  <header id="crumbs"></header>
+  <div id="stage">
+    <div id="world" class="overview">
+      <img id="img" alt="" draggable="false">
+      <div class="layer overview" id="cells"></div>
+      <svg class="overview" id="links" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="layer overview" id="pins" style="pointer-events:none"></div>
+      <div class="layer detail grid" id="grid"></div>
+      <div class="layer detail" id="markers" style="pointer-events:none"></div>
+    </div>
+  </div>
+</main>
+<div id="tip"></div>
+<aside>
+  <div class="sec">
+    <div id="drop">Drop your <b>spoiler.json</b> here, or click to choose<input id="file" type="file" accept=".json,application/json" hidden></div>
+    <div id="status"></div>
+    <div class="row" style="margin-top:8px">
+      <label><input type="checkbox" id="spoil"> Show chest contents (spoilers)</label>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <label><input type="checkbox" id="showLocked" checked> locked</label>
+      <label><input type="checkbox" id="showDone" checked> collected</label>
+      <button class="act" id="reset">Reset progress</button>
+    </div>
+  </div>
+  <div class="sec"><h2>Items you have</h2><div class="inv" id="inv"></div></div>
+  <div class="sec" id="availSec" style="display:none"><h2>Available in reachable chests</h2><div id="avail"></div></div>
+  <div class="sec" id="exitSec" style="display:none"><h2>Connects to</h2><div class="exits" id="exits"></div></div>
+  <div class="listhead"><h2 id="listTitle"></h2></div>
+  <div class="list" id="srcs"></div>
+</aside>
+<script>
+const ATLAS = /*ATLAS*/null;
+const WORLD = /*WORLD*/null;
+const GRAPH = /*GRAPH*/null;
+/*LOGIC*/
+const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const CREST_NAMES = Object.keys(CREST_NODES);
+const DEFAULT_SETTINGS = { progressiveItems: true, splitBootsEffects: true, skipLastDungeon: true, magyscarRequiresBomb: true, usedCrests: CREST_NAMES };
+const DEFAULT_START = ['Dagger', 'Cloth Armor', 'Short Boots'];
+
+// Same storage as the v3 tracker, so progress carries over between the two pages
+const STORE_KEY = 'alundra-tracker-v3';
+const store = {
+  get() { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { return {}; } },
+  set(v) { try { localStorage.setItem(STORE_KEY, JSON.stringify(v)); } catch (e) {} },
+};
+const mapById = Object.fromEntries(ATLAS.maps.map(m => [m.id, m]));
+const WORLD_MAP = mapById.world;
+const { w: CW, h: CH } = GRAPH.cell;
+const locById = Object.fromEntries(GRAPH.locations.map(l => [l.id, l]));
+const sectors = GRAPH.locations.filter(l => l.kind === 'sector');
+const pinned = GRAPH.locations.filter(l => l.kind !== 'sector');
+const keyOf = i => `${ATLAS.sources[i].full} (${ATLAS.sources[i].vanilla})`;
+const neighbours = {};
+GRAPH.edges.forEach(([a, b]) => { (neighbours[a] = neighbours[a] || []).push(b); (neighbours[b] = neighbours[b] || []).push(a); });
+const KIND_LABEL = { sector: 'overworld sector', cave: 'cave', dungeon: 'dungeon', shop: 'shop', place: 'place', hub: 'underground river' };
+
+// ---- state
+let saved = store.get();               // { spoiler: raw text, collected: [i], manual: {item: n} }
+let contents = {};                     // source index -> item name, from the spoiler
+let seed = null;
+let settings = DEFAULT_SETTINGS, startItems = DEFAULT_START, paths = buildPaths(WORLD, DEFAULT_SETTINGS);
+let collected = new Set(saved.collected || []);
+let manual = saved.manual || {};
+let spoilers = false, reach = new Set(), explored = new Set();
+let here = null, curMap = null;        // the location open, or null for the world overview
+const views = { overview: { x: 0, y: 0, k: 1 }, detail: { x: 0, y: 0, k: 1 } };
+const persist = () => store.set({ spoiler: saved.spoiler, collected: [...collected], manual });
+
+function loadSpoiler(text) {
+  const json = JSON.parse(text);
+  if (!json.itemSources) throw new Error('This file has no "itemSources": use the spoiler.json written by the randomizer.');
+  const flat = {};
+  for (const region of Object.values(json.itemSources)) Object.assign(flat, region);
+  contents = {}; let matched = 0;
+  ATLAS.sources.forEach((_, i) => { const it = flat[keyOf(i)]; if (it) { contents[i] = it; matched++; } });
+  seed = json;
+  const gs = json.gameSettings || {}, rs = json.randomizerSettings || {};
+  const all = new Set(Object.values(contents));
+  settings = {
+    progressiveItems: gs.progressiveItems !== false, splitBootsEffects: gs.splitBootsEffects !== false,
+    skipLastDungeon: gs.skipLastDungeon !== false, magyscarRequiresBomb: !!rs.magyscarRequiresBomb,
+    usedCrests: CREST_NAMES.filter(c => all.has(c)),
+  };
+  startItems = rs.startingInventory || DEFAULT_START;
+  paths = buildPaths(WORLD, settings);
+  return matched;
+}
+
+function inventory() {
+  const inv = {};
+  const add = (n, c = 1) => { inv[n] = (inv[n] || 0) + c; };
+  startItems.forEach(n => add(n));
+  collected.forEach(i => { if (contents[i]) add(contents[i]); });
+  for (const [n, c] of Object.entries(manual)) add(n, c);
+  return inv;
+}
+
+function recompute() {
+  const inv = inventory();
+  explored = exploreNodes(paths, inv);
+  reach = new Set(ATLAS.sources.map((s, i) => i).filter(i => explored.has(ATLAS.sources[i].node)));
+  return inv;
+}
+const stateOf = i => collected.has(i) ? 'done' : reach.has(i) ? 'reach' : 'lock';
+const shownItem = i => contents[i] && (spoilers || collected.has(i)) ? contents[i] : null;
+const shortName = i => ATLAS.sources[i].full.replace(/^[^:]+: /, '');
+function locStats(l) {
+  const left = l.sources.filter(i => !collected.has(i));
+  return { total: l.sources.length, left: left.length, open: left.filter(i => reach.has(i)).length, reached: l.nodes.some(n => explored.has(n)) };
+}
+const locTitle = l => l.kind === 'sector' ? `${l.code} · ${l.name}` : l.name;
+const countState = s => !s.total ? 'none' : !s.left ? 'cleared' : s.open ? 'open' : 'left';
+const countText = s => !s.total ? '' : !s.left ? '✓' : String(s.open || s.left);
+
+// ---- rendering
+function render() {
+  const inv = recompute();
+  renderStatus();
+  renderInventory(inv);
+  renderAvail();
+  renderCrumbs();
+  if (here) { renderMarkers(); renderExits(); } else { renderOverview(); renderWhereToGo(); }
+}
+
+function renderStatus() {
+  const total = ATLAS.sources.length, left = [...reach].filter(i => !collected.has(i)).length;
+  const seedText = seed ? `Seed <b>${esc(seed.hashSentence || seed.permalink || 'loaded')}</b>` : 'No seed loaded: you can still set items by hand';
+  $('status').innerHTML = `${seedText}<br><b>${left}</b> reachable chests left · <b>${collected.size}</b>/${total} collected · game beatable: <b>${explored.has(END_NODE) ? 'yes' : 'not yet'}</b>`;
+}
+
+function renderInventory(inv) {
+  const wanted = requiredItemCounts(paths);
+  const names = Object.keys(wanted).sort((a, b) => (CREST_NAMES.includes(a) - CREST_NAMES.includes(b)) || a.localeCompare(b));
+  const box = $('inv'); box.innerHTML = '';
+  for (const n of names) {
+    const total = inv[n] || 0;
+    const d = document.createElement('div'); d.className = 'it' + (total ? ' has' : '');
+    d.innerHTML = `<span title="${esc(n)}${wanted[n] > 1 ? ` (some paths need ${wanted[n]})` : ''}">${esc(n)}</span><div><button>−</button><span class="n">${total}</span><button>+</button></div>`;
+    const [minus, plus] = d.querySelectorAll('button');
+    minus.onclick = () => { if ((inv[n] || 0) > 0) { manual[n] = (manual[n] || 0) - 1; persist(); render(); } };
+    plus.onclick = () => { manual[n] = (manual[n] || 0) + 1; persist(); render(); };
+    box.append(d);
+  }
+}
+
+function renderAvail() {
+  const on = spoilers && seed;
+  $('availSec').style.display = on ? '' : 'none';
+  if (!on) return;
+  const counts = {};
+  [...reach].filter(i => !collected.has(i) && contents[i]).forEach(i => counts[contents[i]] = (counts[contents[i]] || 0) + 1);
+  const rows = Object.entries(counts).sort((a, b) => a[0].localeCompare(b[0]));
+  $('avail').innerHTML = rows.length ? rows.map(([n, c]) => `<div><span>${esc(n)}</span><span>${c}</span></div>`).join('') : '<div>Nothing reachable and uncollected.</div>';
+}
+
+function renderCrumbs() {
+  const h = $('crumbs'); h.innerHTML = '';
+  const el = (tag, cls, text) => { const e = document.createElement(tag); e.className = cls; e.textContent = text; h.append(e); return e; };
+  if (!here) {
+    el('span', 'here', 'World');
+    const legend = el('span', 'legend', '');
+    legend.innerHTML = '<span><i style="background:#4cc2ff">3</i>can open now</span><span><i style="background:#555;color:#ddd">5</i>left, locked</span><span><i style="background:var(--g)">✓</i>done</span>'
+      + '<span><i style="border-color:var(--cave)"></i>cave</span><span><i style="border-color:var(--dungeon)"></i>dungeon</span><span><i style="border-color:var(--shop)"></i>shop</span><span>dark = can\'t get there yet · dashed = underground link</span>';
+    el('span', 'hint', 'Click a pin or sector to open it · drag · scroll to zoom');
+    return;
+  }
+  el('button', 'crumb', 'World').onclick = () => go(null);
+  const parent = here.parent && locById[here.parent];
+  if (parent) { el('span', 'sep', '›'); el('button', 'crumb', locTitle(parent)).onclick = () => go(parent.id); }
+  el('span', 'sep', '›'); el('span', 'here', locTitle(here));
+  if (here.maps.length > 1) {
+    const tabs = el('div', 'tabs', '');
+    here.maps.forEach(m => {
+      const b = document.createElement('button'); b.className = m === curMap ? 'on' : '';
+      const n = here.sources.filter(i => ATLAS.placements[i].map === m).length;
+      b.textContent = `${mapById[m].title} (${n})`;
+      b.onclick = () => go(here.id, m);
+      tabs.append(b);
+    });
+  }
+  el('span', 'hint', 'Click a chest to mark it collected · Esc for the world');
+}
+
+// ---- world overview: sectors, pins, underground links
+const cellCenter = l => [(l.col + 0.5) * CW, (l.row + 0.5) * CH];
+const anchorOf = l => l.kind === 'sector' ? cellCenter(l) : [l.x, l.y];
+
+function renderOverview() {
+  const stats = Object.fromEntries(GRAPH.locations.map(l => [l.id, locStats(l)]));
+
+  const cells = $('cells'); cells.innerHTML = '';
+  for (const l of sectors) {
+    const s = stats[l.id];
+    const c = document.createElement('div');
+    c.className = 'cellz' + (s.reached ? '' : ' fog');
+    c.style.cssText = `left:${l.col * CW}px;top:${l.row * CH}px;width:${CW}px;height:${CH}px`;
+    const chip = document.createElement('div'); chip.className = 'chip' + (s.reached ? '' : ' fog');
+    chip.style.left = 'calc(18px * var(--inv))'; chip.style.top = 'calc(14px * var(--inv))';
+    chip.innerHTML = `<b></b>${s.total ? `<span class="cnt ${countState(s)}">${countText(s)}</span>` : ''}`;
+    chip.children[0].textContent = l.code;
+    c.append(chip);
+    c.onmouseenter = c.onmousemove = e => locTip(e, l, s);
+    c.onmouseleave = hideTip;
+    c.onclick = () => { if (!moved) go(l.id); };
+    cells.append(c);
+  }
+
+  // Links that leave a sector: the river, the waterway, dungeons reached from the next sector
+  const svgEl = $('links');
+  svgEl.setAttribute('width', WORLD_MAP.w); svgEl.setAttribute('height', WORLD_MAP.h);
+  svgEl.innerHTML = '';
+  for (const [a, b] of GRAPH.edges) {
+    const A = locById[a], B = locById[b];
+    if (A.kind === 'sector' && B.kind === 'sector') continue;
+    if (A.kind === 'sector' ? B.parent === A.id : B.kind === 'sector' && A.parent === B.id) continue;
+    const [x1, y1] = anchorOf(A), [x2, y2] = anchorOf(B);
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    Object.entries({ x1, y1, x2, y2 }).forEach(([k, v]) => line.setAttribute(k, v));
+    line.setAttribute('vector-effect', 'non-scaling-stroke');
+    if (stats[a].reached && stats[b].reached) line.setAttribute('class', 'open');
+    svgEl.append(line);
+  }
+
+  const pins = $('pins'); pins.innerHTML = '';
+  for (const l of pinned) {
+    const s = stats[l.id];
+    const p = document.createElement('div');
+    p.className = `pin ${l.kind} ${countState(s)}${s.reached ? '' : ' unreached'}${l.side === 'l' ? ' l' : ''}`;
+    p.style.left = l.x + 'px'; p.style.top = l.y + 'px'; p.dataset.id = l.id; p.style.pointerEvents = 'auto';
+    p.innerHTML = `<span class="dot">${countText(s) || (l.kind === 'hub' ? '≈' : '')}</span><span class="lbl"></span>`;
+    p.lastChild.textContent = l.name;
+    p.onpointerdown = e => e.stopPropagation();
+    p.onmouseenter = p.onmousemove = e => locTip(e, l, s);
+    p.onmouseleave = hideTip;
+    p.onclick = () => go(l.id);
+    pins.append(p);
+  }
+}
+
+function locTip(e, l, s) {
+  const lines = [`<b>${esc(locTitle(l))}</b> <small>(${KIND_LABEL[l.kind]})</small>`];
+  if (!s.reached) lines.push("You can't get here yet");
+  lines.push(s.total ? `${s.open} reachable · ${s.left} left · ${s.total} total` : 'No chests here');
+  const links = (neighbours[l.id] || []).map(id => locById[id]).filter(n => n.kind !== 'sector' || n.id !== l.parent);
+  if (links.length && l.kind !== 'sector') lines.push('Leads to: ' + esc(links.map(locTitle).join(', ')));
+  if (spoilers && seed) {
+    const items = l.sources.filter(i => !collected.has(i) && reach.has(i) && contents[i]).map(i => contents[i]);
+    if (items.length) lines.push('<i>' + esc(items.join(', ')) + '</i>');
+  }
+  showTip(e, lines.join('<br>'));
+}
+
+// Overview side list: where reachable chests are waiting
+function renderWhereToGo() {
+  $('exitSec').style.display = 'none';
+  const open = GRAPH.locations.map(l => ({ l, s: locStats(l) })).filter(r => r.s.open).sort((a, b) => b.s.open - a.s.open);
+  $('listTitle').textContent = open.length ? `Chests you can open now, in ${open.length} places` : 'No reachable chests left';
+  const list = $('srcs'); list.innerHTML = '';
+  for (const { l, s } of open) {
+    const d = document.createElement('div'); d.className = 'loc';
+    d.innerHTML = `<span><span></span><br><small>${s.left} left of ${s.total}${l.kind !== 'sector' && l.parent ? ' · in ' + esc(locById[l.parent].code) : ''}</small></span><span class="n">${s.open}</span>`;
+    d.firstChild.firstChild.textContent = locTitle(l);
+    d.onclick = () => go(l.id);
+    d.onmouseenter = () => flashPin(l);
+    list.append(d);
+  }
+  if (!open.length) list.innerHTML = '<div class="empty">Find more items, or add them by hand above.</div>';
+}
+
+function flashPin(l) {
+  const p = document.querySelector(`.pin[data-id="${l.id}"]`);
+  if (!p) return; p.classList.remove('flash'); void p.offsetWidth; p.classList.add('flash');
+}
+
+// ---- location map
+function renderMarkers() {
+  const mk = $('markers'); mk.innerHTML = '';
+  const list = $('srcs'); list.innerHTML = '';
+  const order = { reach: 0, lock: 1, done: 2 };
+  const ids = here.sources.filter(i => ATLAS.placements[i].map === curMap).sort((a, b) => order[stateOf(a)] - order[stateOf(b)]);
+  const s = locStats(here);
+  $('listTitle').textContent = s.total ? `${s.open} reachable · ${s.left} left · ${s.total} chests` : 'No chests here';
+  ids.forEach(i => {
+    const p = ATLAS.placements[i], st = stateOf(i);
+    if ((st === 'lock' && !$('showLocked').checked) || (st === 'done' && !$('showDone').checked)) return;
+    const m = document.createElement('div');
+    m.className = `mk ${st} c${p.c}`; m.style.left = p.x + 'px'; m.style.top = p.y + 'px'; m.dataset.i = i; m.style.pointerEvents = 'auto';
+    m.onmouseenter = m.onmousemove = e => chestTip(e, i);
+    m.onmouseleave = hideTip;
+    m.onpointerdown = e => e.stopPropagation();
+    m.onclick = () => toggle(i);
+    mk.append(m);
+
+    const row = document.createElement('div'); row.className = 'src ' + st;
+    const item = shownItem(i);
+    row.innerHTML = `<b></b><span></span>`;
+    row.firstChild.textContent = shortName(i);
+    row.lastChild.textContent = (item ? item : st === 'done' ? 'collected' : st === 'reach' ? 'reachable' : 'locked') + ' · double-click to toggle';
+    row.onclick = () => flashChest(i);
+    row.ondblclick = () => toggle(i);
+    list.append(row);
+  });
+  // This location's chests on its other maps
+  here.maps.filter(m => m !== curMap).forEach(m => {
+    const n = here.sources.filter(i => ATLAS.placements[i].map === m);
+    const d = document.createElement('div'); d.className = 'loc';
+    d.innerHTML = `<span><span></span><br><small>${n.filter(i => !collected.has(i)).length} left of ${n.length} on this map</small></span>`;
+    d.firstChild.firstChild.textContent = '→ ' + mapById[m].title;
+    d.onclick = () => go(here.id, m);
+    list.append(d);
+  });
+}
+
+function renderExits() {
+  $('exitSec').style.display = '';
+  const box = $('exits'); box.innerHTML = '';
+  const ids = [...new Set(neighbours[here.id] || [])];
+  // A sector also leads to every pin inside it
+  if (here.kind === 'sector') pinned.filter(l => l.parent === here.id).forEach(l => { if (!ids.includes(l.id)) ids.push(l.id); });
+  if (!ids.length) { box.innerHTML = '<span class="row">Nothing</span>'; return; }
+  ids.map(id => locById[id]).sort((a, b) => (a.kind === 'sector') - (b.kind === 'sector') || a.name.localeCompare(b.name)).forEach(l => {
+    const s = locStats(l);
+    const b = document.createElement('button');
+    b.innerHTML = `<span></span>${s.open ? ` <b>${s.open}</b>` : ''}`;
+    b.firstChild.textContent = locTitle(l);
+    if (!s.reached) b.style.opacity = .55;
+    b.onclick = () => go(l.id);
+    box.append(b);
+  });
+}
+
+function chestTip(e, i) {
+  const st = stateOf(i), item = shownItem(i);
+  showTip(e, `<b>${esc(shortName(i))}</b><br>${esc({ reach: 'Reachable', lock: 'Locked: you are missing something', done: 'Collected' }[st])}${item ? `<br>Contains: <b>${esc(item)}</b>` : ''}<br><small>click to ${collected.has(i) ? 'un-collect' : 'mark collected'}</small>`);
+}
+function showTip(e, html) {
+  if (drag && moved) return;
+  const t = $('tip'); t.innerHTML = html; t.style.display = 'block';
+  const x = Math.min(e.clientX + 14, innerWidth - t.offsetWidth - 6), y = Math.min(e.clientY + 14, innerHeight - t.offsetHeight - 6);
+  t.style.left = x + 'px'; t.style.top = y + 'px';
+}
+const hideTip = () => { $('tip').style.display = 'none'; };
+
+function toggle(i) {
+  if (collected.has(i)) collected.delete(i); else collected.add(i);
+  persist(); render();
+}
+
+function flashChest(i) {
+  const m = document.querySelector(`.mk[data-i="${i}"]`); if (!m) return;
+  const p = ATLAS.placements[i], r = stage.getBoundingClientRect(), v = views.detail;
+  v.k = Math.max(v.k, 0.6);
+  v.x = r.width / 2 - p.x * v.k; v.y = r.height / 2 - p.y * v.k; applyView();
+  m.classList.remove('hl'); void m.offsetWidth; m.classList.add('hl');
+}
+
+// ---- navigation: #loc=<id>&map=<map>, so the browser's back button works
+function go(id, map) {
+  const want = id ? `#loc=${encodeURIComponent(id)}${map ? `&map=${encodeURIComponent(map)}` : ''}` : '';
+  if (location.hash.slice(1) !== want.slice(1)) location.hash = want || '#'; else route();
+}
+function route() {
+  const q = new URLSearchParams(location.hash.slice(1));
+  const l = locById[q.get('loc')] || null;
+  hideTip();
+  const prev = here ? here.id + '/' + curMap : 'overview';
+  here = l && l.maps.length ? l : null;
+  curMap = here ? (here.maps.includes(q.get('map')) ? q.get('map') : here.maps[0]) : null;
+  const next = here ? here.id + '/' + curMap : 'overview';
+  $('world').className = here ? 'detail' : 'overview';
+  const m = here ? mapById[curMap] : WORLD_MAP;
+  const img = $('img'), w = $('world');
+  img.width = m.w; img.height = m.h;
+  const fit = () => { here ? fitDetail() : fitOverview(); w.style.visibility = 'visible'; };
+  const g = $('grid'); g.innerHTML = '';
+  if (here && m.id === 'world') {
+    for (let c = 0; c < 5; c++) for (let r = 0; r < 4; r++) {
+      const i = document.createElement('i'); i.style.cssText = `left:${c * CW}px;top:${r * CH}px;width:${CW}px;height:${CH}px`; g.append(i);
+      const b = document.createElement('b'); b.textContent = 'ABCDE'[c] + (r + 1); b.style.cssText = `left:${c * CW + 14}px;top:${r * CH + 8}px`; g.append(b);
+    }
+  }
+  render();
+  if (img.getAttribute('src') !== '../v2/maps/' + m.file) {
+    w.style.visibility = 'hidden';
+    img.onload = () => { if (prev !== next || !fitted[next]) fit(); fitted[next] = true; };
+    img.src = '../v2/maps/' + m.file;
+  } else if (prev !== next || !fitted[next]) { fit(); fitted[next] = true; } else applyView();
+}
+const fitted = {};
+addEventListener('hashchange', route);
+
+// ---- pan / zoom
+const stage = $('stage');
+const curView = () => here ? views.detail : views.overview;
+function applyView() {
+  const v = curView(), w = $('world');
+  w.style.transform = `translate(${v.x}px,${v.y}px) scale(${v.k})`; w.style.setProperty('--inv', 1 / v.k);
+}
+function fitBox(v, x0, y0, x1, y1, pad) {
+  const r = stage.getBoundingClientRect();
+  v.k = Math.min((r.width - 2 * pad) / (x1 - x0), (r.height - 2 * pad) / (y1 - y0));
+  v.x = (r.width - (x1 - x0) * v.k) / 2 - x0 * v.k;
+  v.y = (r.height - (y1 - y0) * v.k) / 2 - y0 * v.k;
+  applyView();
+}
+function fitOverview() { fitBox(views.overview, 0, 0, WORLD_MAP.w, WORLD_MAP.h, 4); }
+function fitDetail() {
+  const m = mapById[curMap];
+  if (m.id !== 'world') return fitBox(views.detail, 0, 0, m.w, m.h, 10);
+  // On the overworld, frame this location's chests (and a sector's own grid cell)
+  const pts = here.sources.map(i => ATLAS.placements[i]).filter(p => p.map === 'world');
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const addPt = (x, y) => { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); };
+  pts.forEach(p => addPt(p.x, p.y));
+  if (here.kind === 'sector') { addPt(here.col * CW, here.row * CH); addPt((here.col + 1) * CW, (here.row + 1) * CH); }
+  if (x0 === Infinity) return fitBox(views.detail, 0, 0, m.w, m.h, 10);
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, hw = Math.max(x1 - x0 + 160, 900) / 2, hh = Math.max(y1 - y0 + 160, 700) / 2;
+  fitBox(views.detail, cx - hw, cy - hh, cx + hw, cy + hh, 6);
+}
+let drag = null, moved = false;
+stage.onpointerdown = e => { const v = curView(); drag = { x: e.clientX - v.x, y: e.clientY - v.y, sx: e.clientX, sy: e.clientY }; moved = false; stage.classList.add('drag'); };
+addEventListener('pointerup', () => { drag = null; stage.classList.remove('drag'); });
+addEventListener('pointermove', e => {
+  if (!drag) return;
+  if (!moved && Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) > 4) { moved = true; hideTip(); }
+  if (!moved) return;
+  const v = curView(); v.x = e.clientX - drag.x; v.y = e.clientY - drag.y; applyView();
+});
+stage.addEventListener('wheel', e => {
+  e.preventDefault(); const v = curView(), r = stage.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, f = Math.exp(-e.deltaY * 0.0015);
+  v.x = mx - (mx - v.x) * f; v.y = my - (my - v.y) * f; v.k *= f; applyView();
+}, { passive: false });
+addEventListener('resize', () => here ? fitDetail() : fitOverview());
+addEventListener('keydown', e => { if (e.key === 'Escape' && here && !e.target.closest('input')) go(null); });
+
+// ---- controls
+function acceptSpoiler(text) {
+  try {
+    const matched = loadSpoiler(text);
+    saved.spoiler = text; collected = new Set(); manual = {}; persist();
+    if (matched < ATLAS.sources.length) alert(`Only ${matched} of ${ATLAS.sources.length} item sources were found in this file.`);
+    render();
+  } catch (e) { alert('Could not read this file: ' + e.message); }
+}
+const drop = $('drop');
+drop.onclick = () => $('file').click();
+$('file').onchange = e => { const f = e.target.files[0]; if (f) f.text().then(acceptSpoiler); };
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) f.text().then(acceptSpoiler); };
+$('spoil').onchange = e => { spoilers = e.target.checked; render(); };
+$('showLocked').onchange = $('showDone').onchange = render;
+$('reset').onclick = () => { if (confirm('Clear collected chests and manual item counts for this seed?')) { collected = new Set(); manual = {}; persist(); render(); } };
+// Another tab (or the v3 page) changed the shared progress
+addEventListener('storage', e => {
+  if (e.key !== STORE_KEY) return;
+  saved = store.get(); collected = new Set(saved.collected || []); manual = saved.manual || {};
+  if (saved.spoiler) { try { loadSpoiler(saved.spoiler); } catch (err) {} }
+  render();
+});
+
+if (saved.spoiler) { try { loadSpoiler(saved.spoiler); } catch (e) { saved.spoiler = null; } }
+route();
+</script>
+</body>
+</html>

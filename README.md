@@ -8,17 +8,19 @@ They are static HTML pages in `docs/`, built by Node scripts from the randomizer
 
 | Page | What it is | Built by |
 | --- | --- | --- |
+| `docs/v4/index.html` | World tracker: the seed tracker on the real overworld map. Caves and dungeons are pins on their entrance with the chests left inside; click one to open its map. Shares progress with v3. | `scripts/v4/build.js` |
 | `docs/v3/index.html` | Seed tracker: load a `spoiler.json`, chest contents stay hidden, and it shows which chests you can reach with the items you own. | `scripts/v3/build.js` |
 | `docs/v2/index.html` | Chest atlas on the vgmaps Alundra maps. Also writes `docs/data/atlas.json`, the pin positions the tracker uses. | `scripts/v2/build.js` |
 | `docs/world_map.html` | First version: interactive graph of item locations. | `scripts/gen_world_map.js` |
 
 ## Build
 
-Needs Node.js. The tracker uses the atlas pins, so build v2 before v3:
+Needs Node.js. The trackers use the atlas pins, so build v2 before v3 and v4:
 
 ```
 node scripts/v2/build.js
 node scripts/v3/build.js
+node scripts/v4/build.js
 node scripts/gen_world_map.js
 ```
 
@@ -27,6 +29,8 @@ Check the tracker logic against the randomizer's reference spoiler (or pass anot
 ```
 node scripts/v3/test_logic.js [spoiler.json]
 ```
+
+The v4 pin positions (cave and dungeon entrances on `World.png`) are the `PINS` table in `scripts/v4/build.js`.
 
 To view the pages, serve `docs/` with any static server (the `.claude/launch.json` one listens on port 8765).
 
@@ -39,7 +43,7 @@ spoiler. When the randomizer's logic data changes, refresh them and rebuild:
 scripts/sync_data.sh ../alundra-item-randomizer
 ```
 
-`scripts/v3/logic.js` mirrors how the randomizer adjusts path requirements for a seed, so it needs updating too if
+`scripts/v3/logic.js` (also used by v4) mirrors how the randomizer adjusts path requirements for a seed, so it needs updating too if
 that behaviour changes.
 
 ## Map images
