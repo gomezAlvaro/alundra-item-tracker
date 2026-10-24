@@ -4,10 +4,10 @@ const fs = require('fs');
 const path = require('path');
 const { buildPaths, exploreNodes, END_NODE } = require('./logic.js');
 
-const data = f => JSON.parse(fs.readFileSync(path.join(__dirname, '../../src/main/resources/data', f), 'utf8'));
+const data = f => JSON.parse(fs.readFileSync(path.join(__dirname, '../../data', f), 'utf8'));
 const world = { paths: data('world_path.json'), items: data('item.json') };
 const sources = data('item_source.json');
-const spoilerFile = process.argv[2] || path.join(__dirname, '../../src/test/resources/golden/cpp_reference_spoiler.json');
+const spoilerFile = process.argv[2] || path.join(__dirname, '../../test/reference_spoiler.json');
 const spoiler = JSON.parse(fs.readFileSync(spoilerFile, 'utf8'));
 
 const contents = {};

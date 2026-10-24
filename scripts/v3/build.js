@@ -5,7 +5,7 @@ const path = require('path');
 
 const root = path.join(__dirname, '../..');
 const read = f => fs.readFileSync(f, 'utf8');
-const dataDir = path.join(root, 'src/main/resources/data');
+const dataDir = path.join(root, 'data');
 
 const atlas = JSON.parse(read(path.join(root, 'docs/data/atlas.json')));
 const world = {

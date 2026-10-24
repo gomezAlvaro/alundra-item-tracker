@@ -1,6 +1,6 @@
 // One-off helper that wrote confidence.js from the manual review of the yellow markers (kept for reference).
 const fs = require('fs');
-const sources = JSON.parse(fs.readFileSync(__dirname + '/../../src/main/resources/data/item_source.json', 'utf8'));
+const sources = JSON.parse(fs.readFileSync(__dirname + '/../../data/item_source.json', 'utf8'));
 const s = fs.readFileSync(__dirname + '/../../docs/v2/index.html', 'utf8');
 const d = JSON.parse(s.match(/const D = (\{.*\});\nconst CAT/s)[1]);
 // still unsure which of several identical chests this is, or the room itself is a guess
