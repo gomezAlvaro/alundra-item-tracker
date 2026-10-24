@@ -21,7 +21,9 @@ const world = {
 const CELL_W = 1249.4, CELL_H = 961;
 const OVERWORLD = /^Overworld ([A-E])([1-4]) \((.+)\)$/;
 const SPECIAL_SECTORS = { Inoa: { col: 2, row: 2 } };
-const KIND_OVERRIDES = { "Merrick's shop": 'shop', 'Riverside Casino': 'place', 'Fairy Pond': 'place', 'River network': 'hub' };
+const KIND_OVERRIDES = { "Merrick's shop": 'shop', 'Riverside Casino': 'place', 'Fairy Pond': 'place' };
+// Routing-only regions with no chests: they are not places you can open, so they get no pin
+const HIDDEN = new Set(['River network']);
 const NAME_FIXES = { 'Undeground Waterway': 'Underground Waterway' };
 // Cave maps whose atlas title would clash with a dungeon's name, or reads badly as a pin
 const CAVE_NAMES = {
@@ -44,7 +46,6 @@ const PINS = {
     'reptile-lair': [4610, 3200],
     'riverside-casino': [1910, 2600],
     'fairy-pond': [905, 2900],
-    'river-network': [1690, 3340],
     'overworld-b4-nava-s-cabin-sector--navacabin': [1700, 3620, 'l'],
     'nava-s-keep': [1870, 3720],
     'overworld-e4-cliffs-of-madness--cliffs': [6150, 3700, 'l'],
@@ -82,6 +83,7 @@ const primaryOf = {};     // region name -> its location (sector or dungeon)
 const add = loc => { locations.push(loc); return loc; };
 
 for (const r of regions) {
+    if (HIDDEN.has(r.name)) continue;
     const groups = byRegion[r.name] || {};
     const ow = r.name.match(OVERWORLD), special = SPECIAL_SECTORS[r.name];
     if (ow || special) {
@@ -132,7 +134,7 @@ const addEdge = (a, b) => {
 };
 for (const p of worldPaths) {
     const a = regionOf[p.fromId], b = regionOf[p.toId];
-    if (a && b && a !== b) addEdge(primaryOf[a].id, primaryOf[b].id);
+    if (a && b && a !== b && primaryOf[a] && primaryOf[b]) addEdge(primaryOf[a].id, primaryOf[b].id);
 }
 locations.filter(l => l.kind === 'cave').forEach(l => addEdge(l.parent, l.id));
 

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Alundra World Tracker</title>
 <style>
-:root{--bg:#1b1c20;--panel:#25272d;--text:#e9e9ec;--muted:#9a9ca4;--border:#3a3d46;--accent:#4cc2ff;--done:#6fd88a;--cave:#e0a050;--dungeon:#c08cff;--shop:#f2d230;--hub:#5fd0e0;--g:#3ecf5a;--y:#f2d230;--r:#ef4b4b}
+:root{--bg:#1b1c20;--panel:#25272d;--text:#e9e9ec;--muted:#9a9ca4;--border:#3a3d46;--accent:#4cc2ff;--done:#6fd88a;--cave:#e0a050;--dungeon:#c08cff;--shop:#f2d230;--g:#3ecf5a;--y:#f2d230;--r:#ef4b4b}
 @media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#e9e7e1;--panel:#fff;--text:#222;--muted:#6b6b6b;--border:#d4d0c4;--accent:#0a7fc2;--done:#2f9a4d}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:13px/1.4 system-ui,sans-serif;display:flex;height:100vh;overflow:hidden}
@@ -52,7 +52,6 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .pin .dot{position:absolute;left:-15px;top:-15px;width:30px;height:30px;border-radius:50%;border:3px solid var(--dungeon);background:#555;display:grid;place-items:center;font-size:13px;box-shadow:0 0 0 2px #000,0 0 10px #000}
 .pin.cave .dot{border-color:var(--cave)}
 .pin.shop .dot,.pin.place .dot{border-color:var(--shop)}
-.pin.hub .dot{border-color:var(--hub);background:#123}
 .pin.open .dot{background:#4cc2ff}
 .pin.left .dot{color:#ddd}
 .pin.cleared .dot{background:var(--g)}
@@ -80,6 +79,7 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .mk.lock{background:#555;opacity:.45}
 .mk.done{background:#222;color:#8f8;opacity:.6}
 .mk.done::after{content:"✓"}
+.ov .mk{width:16px;height:16px;margin:-8px 0 0 -8px;border-width:2px;font-size:10px}
 .mk.hl{animation:pulse 1s 3}
 @keyframes pulse{50%{transform:scale(calc(var(--inv)*2.2))}}
 #tip{position:fixed;pointer-events:none;background:#000e;color:#fff;padding:6px 9px;border-radius:6px;font-size:12px;z-index:5;display:none;max-width:300px}
@@ -128,6 +128,7 @@ button.act{padding:5px 10px;border:1px solid var(--border);border-radius:6px;bac
       <img id="img" alt="" draggable="false">
       <div class="layer overview" id="cells"></div>
       <svg class="overview" id="links" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="layer overview" id="chests" style="pointer-events:none"></div>
       <div class="layer overview" id="pins" style="pointer-events:none"></div>
       <div class="layer detail grid" id="grid"></div>
       <div class="layer detail" id="markers" style="pointer-events:none"></div>
@@ -181,7 +182,7 @@ const pinned = GRAPH.locations.filter(l => l.kind !== 'sector');
 const keyOf = i => `${ATLAS.sources[i].full} (${ATLAS.sources[i].vanilla})`;
 const neighbours = {};
 GRAPH.edges.forEach(([a, b]) => { (neighbours[a] = neighbours[a] || []).push(b); (neighbours[b] = neighbours[b] || []).push(a); });
-const KIND_LABEL = { sector: 'overworld sector', cave: 'cave', dungeon: 'dungeon', shop: 'shop', place: 'place', hub: 'underground river' };
+const KIND_LABEL = { sector: 'overworld sector', cave: 'cave', dungeon: 'dungeon', shop: 'shop', place: 'place' };
 
 // ---- state
 let saved = store.get();               // { spoiler: raw text, collected: [i], manual: {item: n} }
@@ -290,7 +291,7 @@ function renderCrumbs() {
     const legend = el('span', 'legend', '');
     legend.innerHTML = '<span><i style="background:#4cc2ff">3</i>can open now</span><span><i style="background:#555;color:#ddd">5</i>left, locked</span><span><i style="background:var(--g)">✓</i>done</span>'
       + '<span><i style="border-color:var(--cave)"></i>cave</span><span><i style="border-color:var(--dungeon)"></i>dungeon</span><span><i style="border-color:var(--shop)"></i>shop</span><span>dark = can\'t get there yet · dashed = underground link</span>';
-    el('span', 'hint', 'Click a pin or sector to open it · drag · scroll to zoom');
+    el('span', 'hint', 'Click a chest to mark it · click a pin or sector to open it · drag · scroll to zoom');
     return;
   }
   el('button', 'crumb', 'World').onclick = () => go(null);
@@ -350,14 +351,29 @@ function renderOverview() {
     svgEl.append(line);
   }
 
+  // Every overworld chest, like the v3 map: click to mark it collected
+  const ch = $('chests'); ch.innerHTML = '';
+  ch.classList.add('ov');
+  ATLAS.sources.forEach((_, i) => {
+    const p = ATLAS.placements[i]; if (!p || p.map !== 'world') return;
+    const st = stateOf(i);
+    if ((st === 'lock' && !$('showLocked').checked) || (st === 'done' && !$('showDone').checked)) return;
+    const m = document.createElement('div');
+    m.className = `mk ${st} c${p.c}`; m.style.left = p.x + 'px'; m.style.top = p.y + 'px'; m.style.pointerEvents = 'auto';
+    m.onmouseenter = m.onmousemove = e => chestTip(e, i);
+    m.onmouseleave = hideTip;
+    m.onclick = e => { e.stopPropagation(); if (!moved) toggle(i); };
+    ch.append(m);
+  });
+
   const pins = $('pins'); pins.innerHTML = '';
   for (const l of pinned) {
     const s = stats[l.id];
     const p = document.createElement('div');
     p.className = `pin ${l.kind} ${countState(s)}${s.reached ? '' : ' unreached'}${l.side === 'l' ? ' l' : ''}`;
     p.style.left = l.x + 'px'; p.style.top = l.y + 'px'; p.dataset.id = l.id; p.style.pointerEvents = 'auto';
-    p.innerHTML = `<span class="dot">${countText(s) || (l.kind === 'hub' ? '≈' : '')}</span><span class="lbl"></span>`;
-    p.lastChild.textContent = l.name;
+    p.innerHTML = `<span class="dot">${countText(s)}</span><span class="lbl"></span>`;
+    p.lastChild.textContent = s.total ? `${l.name} · ${s.left} left of ${s.total}` : l.name;
     p.onmouseenter = p.onmousemove = e => locTip(e, l, s);
     p.onmouseleave = hideTip;
     p.onclick = e => { e.stopPropagation(); if (!moved) go(l.id); };
