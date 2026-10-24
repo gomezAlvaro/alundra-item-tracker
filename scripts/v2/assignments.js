@@ -317,7 +317,7 @@ module.exports = [
     ['nava', 210, 640, 'nava_keep', "Falling item revealed", 'r'],
     // Hidden chests: no sprite is visible, pinned next to the room or chest they belong to
     ['world', 3000, 3170, 'overworld_c4', "Chest hidden among the trees near the middle", 'g'],
-    ['world', 2390, 1190, 'overworld_b2', "Chest hidden behind musician's house", 'r'],
+    ['world', 1840, 1545, 'overworld_b2', "Chest hidden behind musician's house", 'g'],
     ['coastal', 250, 2870, 'coastal_cave', "Chest hidden behind bricks near entrance", 'r'],
     ['coastal', 1250, 2300, 'coastal_cave', "Chest hidden below bricks in 3-buttons seal room", 'r'],
     ['magyscar', 1860, 1700, 'magyscar', "Chest behind vines in switchable platforms room", 'r'],
