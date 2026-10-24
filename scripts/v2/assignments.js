@@ -59,9 +59,9 @@ module.exports = [
     // C4 (Merrick's shop sector)
     ['world', 2668, 3463, 'overworld_c4_behind_long_boots', 'Left coast chest'],
     ['world', 3652, 3287, 'overworld_c4', 'Chest inside forest near the right border'],
-    ['world', 3568, 3431, 'overworld_c4', 'Bottom-right cliff upper chest'],
-    ['world', 3628, 3615, 'overworld_c4_right_cliff_behind_long_boots', 'Bottom-right cliff lower chest'],
-    ['world', 3316, 3727, 'overworld_c4_behind_spring', 'Right coast chest behind spring'],
+    ['world', 3568, 3431, 'overworld_c4_behind_spring', 'Right coast chest behind spring', 'g'],
+    ['world', 3628, 3615, 'overworld_c4', 'Bottom-right cliff upper chest', 'g'],
+    ['world', 3316, 3727, 'overworld_c4_right_cliff_behind_long_boots', 'Bottom-right cliff lower chest', 'g'],
     // D4 (Reptile Lair sector)
     ['world', 3870, 2927, 'overworld_d4', 'Elevated chest at top-left corner'],
     ['world', 3954, 2951, 'overworld_d4', 'Second chest at top-left corner'],
