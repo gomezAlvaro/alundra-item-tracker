@@ -1,6 +1,8 @@
 # Alundra Item Tracker
 
 Map and tracker pages for the [Alundra randomizer](https://github.com/gomezAlvaro/alundra-item-randomizer).
+
+**Use it online:** https://gomezalvaro.github.io/alundra-item-tracker/
 They are static HTML pages in `docs/`, built by Node scripts from the randomizer's world data.
 
 | Page | What it is | Built by |
