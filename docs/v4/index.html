@@ -34,8 +34,6 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 /* overview: sectors, links and pins */
 .cellz{position:absolute;border:1px solid rgba(255,255,255,.28);cursor:pointer;transition:background .15s}
 .cellz:hover{background:rgba(76,194,255,.10);border-color:rgba(76,194,255,.7)}
-.cellz.fog{background:rgba(0,0,0,.58)}
-.cellz.fog:hover{background:rgba(0,0,0,.45)}
 .dot{font-weight:700;color:#000}
 .pin{position:absolute;width:0;height:0;transform:scale(var(--inv));transform-origin:0 0;cursor:pointer;z-index:1}
 .pin:hover{z-index:3}
@@ -50,8 +48,6 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 #world.compact .pin .lbl{display:none}
 #world.compact .pin:hover .lbl{display:block}
 #world.compact .pin .dot{transform:scale(.8)}
-.pin.unreached{opacity:.55}
-.pin.unreached .lbl{color:#bbb}
 .pin:hover .lbl{background:#4cc2ff;color:#000}
 .pin.flash .dot{animation:pinflash .9s 2}
 @keyframes pinflash{50%{transform:scale(1.8)}}
@@ -372,7 +368,7 @@ function renderCrumbs() {
     el('span', 'here', 'World');
     const legend = el('span', 'legend', '');
     legend.innerHTML = '<span><i style="background:#4cc2ff">3</i>can open now</span><span><i style="background:#555;color:#ddd">5</i>left, locked</span><span><i style="background:var(--g)">✓</i>done</span>'
-      + '<span><i style="border-color:var(--cave)"></i>cave</span><span><i style="border-color:var(--dungeon)"></i>dungeon</span><span><i style="border-color:var(--shop)"></i>shop</span><span>dark = can\'t get there yet</span>';
+      + '<span><i style="border-color:var(--cave)"></i>cave</span><span><i style="border-color:var(--dungeon)"></i>dungeon</span><span><i style="border-color:var(--shop)"></i>shop</span>';
     el('span', 'hint', 'Click a chest to mark it · click a pin or sector to open it · drag · scroll to zoom');
     return;
   }
@@ -404,7 +400,7 @@ function renderOverview() {
   for (const l of sectors) {
     const s = stats[l.id];
     const c = document.createElement('div');
-    c.className = 'cellz' + (s.reached ? '' : ' fog');
+    c.className = 'cellz';
     c.style.cssText = `left:${l.col * CW}px;top:${l.row * CH}px;width:${CW}px;height:${CH}px`;
     c.onmouseenter = c.onmousemove = e => locTip(e, l, s);
     c.onmouseleave = hideTip;
@@ -431,7 +427,7 @@ function renderOverview() {
   for (const l of pinned) {
     const s = stats[l.id];
     const p = document.createElement('div');
-    p.className = `pin ${l.kind} ${countState(s)}${s.reached ? '' : ' unreached'}${l.side === 'l' ? ' l' : ''}`;
+    p.className = `pin ${l.kind} ${countState(s)}${l.side === 'l' ? ' l' : ''}`;
     p.style.left = l.x + 'px'; p.style.top = l.y + 'px'; p.dataset.id = l.id; p.style.pointerEvents = 'auto';
     p.innerHTML = `<span class="dot">${countText(s)}</span><span class="lbl"></span>`;
     p.lastChild.textContent = s.total ? `${l.name} · ${s.left} left of ${s.total}` : l.name;
