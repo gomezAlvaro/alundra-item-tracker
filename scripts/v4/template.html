@@ -36,17 +36,7 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .cellz:hover{background:rgba(76,194,255,.10);border-color:rgba(76,194,255,.7)}
 .cellz.fog{background:rgba(0,0,0,.58)}
 .cellz.fog:hover{background:rgba(0,0,0,.45)}
-.chip{position:absolute;transform:scale(var(--inv));transform-origin:0 0;display:flex;align-items:center;gap:7px;background:#000c;color:#fff;border-radius:8px;padding:4px 9px 4px 8px;white-space:nowrap;pointer-events:none;font-size:13px}
-.chip b{font-size:17px}
-.chip span{opacity:.85}
-.chip .cnt,.dot{font-weight:700;color:#000}
-.chip .cnt{border-radius:10px;padding:0 7px;font-size:12px;background:#555;color:#ddd}
-.chip .cnt.open{background:#4cc2ff;color:#000}
-.chip .cnt.cleared{background:var(--g);color:#000}
-.fog .chip,.chip.fog{opacity:.75}
-#links{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
-#links line{stroke:#9aa;stroke-width:2.5;stroke-dasharray:7 6;opacity:.8}
-#links line.open{stroke:#4cc2ff;opacity:.95}
+.dot{font-weight:700;color:#000}
 .pin{position:absolute;width:0;height:0;transform:scale(var(--inv));transform-origin:0 0;cursor:pointer;z-index:1}
 .pin:hover{z-index:3}
 .pin .dot{position:absolute;left:-15px;top:-15px;width:30px;height:30px;border-radius:50%;border:3px solid var(--dungeon);background:#555;display:grid;place-items:center;font-size:13px;box-shadow:0 0 0 2px #000,0 0 10px #000}
@@ -60,7 +50,6 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 #world.compact .pin .lbl{display:none}
 #world.compact .pin:hover .lbl{display:block}
 #world.compact .pin .dot{transform:scale(.8)}
-#world.compact .chip span{display:none}
 .pin.unreached{opacity:.55}
 .pin.unreached .lbl{color:#bbb}
 .pin:hover .lbl{background:#4cc2ff;color:#000}
@@ -127,7 +116,6 @@ button.act{padding:5px 10px;border:1px solid var(--border);border-radius:6px;bac
     <div id="world" class="overview">
       <img id="img" alt="" draggable="false">
       <div class="layer overview" id="cells"></div>
-      <svg class="overview" id="links" xmlns="http://www.w3.org/2000/svg"></svg>
       <div class="layer overview" id="chests" style="pointer-events:none"></div>
       <div class="layer overview" id="pins" style="pointer-events:none"></div>
       <div class="layer detail grid" id="grid"></div>
@@ -290,7 +278,7 @@ function renderCrumbs() {
     el('span', 'here', 'World');
     const legend = el('span', 'legend', '');
     legend.innerHTML = '<span><i style="background:#4cc2ff">3</i>can open now</span><span><i style="background:#555;color:#ddd">5</i>left, locked</span><span><i style="background:var(--g)">✓</i>done</span>'
-      + '<span><i style="border-color:var(--cave)"></i>cave</span><span><i style="border-color:var(--dungeon)"></i>dungeon</span><span><i style="border-color:var(--shop)"></i>shop</span><span>dark = can\'t get there yet · dashed = underground link</span>';
+      + '<span><i style="border-color:var(--cave)"></i>cave</span><span><i style="border-color:var(--dungeon)"></i>dungeon</span><span><i style="border-color:var(--shop)"></i>shop</span><span>dark = can\'t get there yet</span>';
     el('span', 'hint', 'Click a chest to mark it · click a pin or sector to open it · drag · scroll to zoom');
     return;
   }
@@ -324,31 +312,10 @@ function renderOverview() {
     const c = document.createElement('div');
     c.className = 'cellz' + (s.reached ? '' : ' fog');
     c.style.cssText = `left:${l.col * CW}px;top:${l.row * CH}px;width:${CW}px;height:${CH}px`;
-    const chip = document.createElement('div'); chip.className = 'chip' + (s.reached ? '' : ' fog');
-    chip.style.left = 'calc(18px * var(--inv))'; chip.style.top = 'calc(14px * var(--inv))';
-    chip.innerHTML = `<b></b>${s.total ? `<span class="cnt ${countState(s)}">${countText(s)}</span>` : ''}`;
-    chip.children[0].textContent = l.code;
-    c.append(chip);
     c.onmouseenter = c.onmousemove = e => locTip(e, l, s);
     c.onmouseleave = hideTip;
     c.onclick = () => { if (!moved) go(l.id); };
     cells.append(c);
-  }
-
-  // Links that leave a sector: the river, the waterway, dungeons reached from the next sector
-  const svgEl = $('links');
-  svgEl.setAttribute('width', WORLD_MAP.w); svgEl.setAttribute('height', WORLD_MAP.h);
-  svgEl.innerHTML = '';
-  for (const [a, b] of GRAPH.edges) {
-    const A = locById[a], B = locById[b];
-    if (A.kind === 'sector' && B.kind === 'sector') continue;
-    if (A.kind === 'sector' ? B.parent === A.id : B.kind === 'sector' && A.parent === B.id) continue;
-    const [x1, y1] = anchorOf(A), [x2, y2] = anchorOf(B);
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    Object.entries({ x1, y1, x2, y2 }).forEach(([k, v]) => line.setAttribute(k, v));
-    line.setAttribute('vector-effect', 'non-scaling-stroke');
-    if (stats[a].reached && stats[b].reached) line.setAttribute('class', 'open');
-    svgEl.append(line);
   }
 
   // Every overworld chest, like the v3 map: click to mark it collected
@@ -519,7 +486,6 @@ function route() {
   if (here && m.id === 'world') {
     for (let c = 0; c < 5; c++) for (let r = 0; r < 4; r++) {
       const i = document.createElement('i'); i.style.cssText = `left:${c * CW}px;top:${r * CH}px;width:${CW}px;height:${CH}px`; g.append(i);
-      const b = document.createElement('b'); b.textContent = 'ABCDE'[c] + (r + 1); b.style.cssText = `left:${c * CW + 14}px;top:${r * CH + 8}px`; g.append(b);
     }
   }
   render();

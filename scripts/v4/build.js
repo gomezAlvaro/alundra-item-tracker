@@ -38,6 +38,7 @@ const PINS = {
     'overworld-b2-coal-mine-sector--coalarea': [1560, 1075],
     'coal-mine': [2090, 1240],
     'overworld-d2-watermill-sector--watermill': [4630, 1700, 'l'],
+    'overworld-d2-watermill-sector--watermill-caverns': [4560, 1800, 'l'],
     'overworld-d2-watermill-sector--waterway': [5000, 1790],
     'undeground-waterway': [5045, 1640],
     'tarn-manor': [4340, 2060],
@@ -63,6 +64,9 @@ const PINS = {
     'tower-of-the-great-tree': [620, 650],
     'lake-shrine': [1900, 140],
 };
+
+// One atlas map holding two places: split its chests by name (the part is the cave's id suffix and name)
+const SPLITS = { watermill: [['', 'Watermill', full => !/(Cavern)/.test(full)], ['caverns', 'Watermill caverns', full => /(Cavern)/.test(full)]] };
 
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const regionOf = {};
@@ -96,11 +100,13 @@ for (const r of regions) {
         primaryOf[r.name] = sector;
         if (!special) {
             for (const map of mapsByCount(groups).filter(m => m !== 'world')) {
-                const ids = groups[map];
-                add({
-                    id: `${sector.id}--${map}`, kind: 'cave', region: r.name, name: CAVE_NAMES[map] || mapTitle[map],
-                    nodes: [...new Set(ids.map(i => atlas.sources[i].node))], sources: ids, maps: [map],
-                });
+                for (const [suffix, name, test] of SPLITS[map] || [['', CAVE_NAMES[map] || mapTitle[map], () => true]]) {
+                    const ids = groups[map].filter(i => test(atlas.sources[i].full));
+                    add({
+                        id: `${sector.id}--${map}${suffix && '-' + suffix}`, kind: 'cave', region: r.name, name,
+                        nodes: [...new Set(ids.map(i => atlas.sources[i].node))], sources: ids, maps: [map],
+                    });
+                }
             }
         }
     } else {
