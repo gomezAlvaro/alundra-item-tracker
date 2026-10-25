@@ -585,7 +585,7 @@ function route() {
   render();
   if (img.getAttribute('src') !== '../v2/maps/' + m.file) {
     w.style.visibility = 'hidden';
-    img.onload = () => { if (needFit()) fit(); fitted[next] = true; };
+    img.onload = () => { if (needFit()) fit(); else applyView(); w.style.visibility = 'visible'; fitted[next] = true; };
     img.onerror = () => { w.style.visibility = 'visible'; };
     img.src = '../v2/maps/' + m.file;
   } else if (needFit()) { fit(); fitted[next] = true; } else applyView();
@@ -679,7 +679,7 @@ $('zoomFit').onclick = () => here ? fitDetail() : fitOverview();
 for (const b of document.querySelectorAll('#zoom button')) b.addEventListener('pointerdown', e => e.stopPropagation());
 // Phones fire resize when the address bar slides in or out: only refit when the width really changes
 let lastWidth = innerWidth;
-addEventListener('resize', () => { if (innerWidth === lastWidth) return; lastWidth = innerWidth; here ? fitDetail() : fitOverview(); });
+addEventListener('resize', () => { if (innerWidth === lastWidth) return; lastWidth = innerWidth; for (const k in fitted) delete fitted[k]; here ? fitDetail() : fitOverview(); fitted[here ? here.id + '/' + curMap : 'overview'] = true; });
 addEventListener('keydown', e => { if (e.key === 'Escape' && here && !(e.target.closest && e.target.closest('input'))) go(here.parent || null); });
 
 // ---- controls
