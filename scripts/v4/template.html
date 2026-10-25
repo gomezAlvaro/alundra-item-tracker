@@ -27,6 +27,8 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 #world{position:absolute;left:0;top:0;transform-origin:0 0}
 #world img{display:block;image-rendering:pixelated;max-width:none}
 #world.overview .detail,#world.detail .overview{display:none}
+#world.wm .detail{display:block}
+#world.wm #chests{display:none}
 .layer{position:absolute;inset:0}
 .grid{pointer-events:none}
 .grid i{position:absolute;border:1px solid rgba(255,255,255,.35)}
@@ -233,7 +235,7 @@ function render() {
   renderInventory(inv);
   renderAvail();
   renderCrumbs();
-  if (here) { renderMarkers(); renderExits(); } else { renderOverview(); renderWhereToGo(); }
+  if (here) { renderMarkers(); renderExits(); if (curMap === 'world') renderOverview(); } else { renderOverview(); renderWhereToGo(); }
 }
 
 function renderStatus() {
@@ -385,8 +387,8 @@ function renderMarkers() {
   const list = $('srcs'); list.innerHTML = '';
   const order = { reach: 0, lock: 1, done: 2 };
   const ids = here.sources.filter(i => ATLAS.placements[i].map === curMap).sort((a, b) => order[stateOf(a)] - order[stateOf(b)]);
-  const s = locStats(here);
-  $('listTitle').textContent = s.total ? `${s.open} reachable · ${s.left} left · ${s.total} chests` : 'No chests here';
+  const s = locStats(here), onMap = here.sources.filter(i => ATLAS.placements[i].map === curMap), left = onMap.filter(i => !collected.has(i));
+  $('listTitle').textContent = s.total ? `${left.filter(i => reach.has(i)).length} reachable · ${left.length} left · ${onMap.length} chests on this map${onMap.length < s.total ? ` (${s.total} in all)` : ''}` : 'No chests here';
   ids.forEach(i => {
     const p = ATLAS.placements[i], st = stateOf(i);
     if ((st === 'lock' && !$('showLocked').checked) || (st === 'done' && !$('showDone').checked)) return;
@@ -421,6 +423,7 @@ function renderExits() {
   $('exitSec').style.display = '';
   const box = $('exits'); box.innerHTML = '';
   const ids = [...new Set(neighbours[here.id] || [])];
+  if (here.parent && !ids.includes(here.parent)) ids.push(here.parent);
   // A sector also leads to every pin inside it
   if (here.kind === 'sector') pinned.filter(l => l.parent === here.id).forEach(l => { if (!ids.includes(l.id)) ids.push(l.id); });
   if (!ids.length) { box.innerHTML = '<span class="row">Nothing</span>'; return; }
@@ -473,10 +476,11 @@ function route() {
   here = l && l.maps.length ? l : null;
   curMap = here ? (here.maps.includes(q.get('map')) ? q.get('map') : here.maps[0]) : null;
   const next = here ? here.id + '/' + curMap : 'overview';
-  $('world').className = here ? 'detail' : 'overview';
+  $('world').className = !here ? 'overview' : curMap === 'world' ? 'overview wm' : 'detail';
   const m = here ? mapById[curMap] : WORLD_MAP;
   const img = $('img'), w = $('world');
   img.width = m.w; img.height = m.h;
+  const needFit = () => !fitted[next] || (here && prev !== next);
   const fit = () => { here ? fitDetail() : fitOverview(); w.style.visibility = 'visible'; };
   const g = $('grid'); g.innerHTML = '';
   if (here && m.id === 'world') {
@@ -487,9 +491,10 @@ function route() {
   render();
   if (img.getAttribute('src') !== '../v2/maps/' + m.file) {
     w.style.visibility = 'hidden';
-    img.onload = () => { if (prev !== next || !fitted[next]) fit(); fitted[next] = true; };
+    img.onload = () => { if (needFit()) fit(); fitted[next] = true; };
+    img.onerror = () => { w.style.visibility = 'visible'; };
     img.src = '../v2/maps/' + m.file;
-  } else if (prev !== next || !fitted[next]) { fit(); fitted[next] = true; } else applyView();
+  } else if (needFit()) { fit(); fitted[next] = true; } else applyView();
 }
 const fitted = {};
 addEventListener('hashchange', route);
@@ -581,11 +586,12 @@ for (const b of document.querySelectorAll('#zoom button')) b.addEventListener('p
 // Phones fire resize when the address bar slides in or out: only refit when the width really changes
 let lastWidth = innerWidth;
 addEventListener('resize', () => { if (innerWidth === lastWidth) return; lastWidth = innerWidth; here ? fitDetail() : fitOverview(); });
-addEventListener('keydown', e => { if (e.key === 'Escape' && here && !e.target.closest('input')) go(null); });
+addEventListener('keydown', e => { if (e.key === 'Escape' && here && !(e.target.closest && e.target.closest('input'))) go(here.parent || null); });
 
 // ---- controls
 function acceptSpoiler(text) {
   try {
+    if ((collected.size || Object.values(manual).some(Boolean)) && !confirm('Loading a seed clears your collected chests and item counts. Continue?')) return;
     const matched = loadSpoiler(text);
     saved.spoiler = text; collected = new Set(); manual = {}; persist();
     if (matched < ATLAS.sources.length) alert(`Only ${matched} of ${ATLAS.sources.length} item sources were found in this file.`);
@@ -606,6 +612,7 @@ addEventListener('storage', e => {
   if (e.key !== STORE_KEY) return;
   saved = store.get(); collected = new Set(saved.collected || []); manual = saved.manual || {};
   if (saved.spoiler) { try { loadSpoiler(saved.spoiler); } catch (err) {} }
+  else { contents = {}; seed = null; settings = DEFAULT_SETTINGS; startItems = DEFAULT_START; paths = buildPaths(WORLD, settings); }
   render();
 });
 
