@@ -110,14 +110,14 @@ module.exports = [
     ['torla', '#5', 0, 'torla_mountain', "Chest in stompable flamethrowers hallway"],
     ['torla', '#7', 0, 'torla_mountain', "Right chest in checkpoint teleporter room"],
     ['torla', '#4', 0, 'torla_mountain', "Chest in pit below wooden bridge"],
-    // Watermill and caverns (D2)
-    ['watermill', '#6', 0, 'overworld_d2_watermill', "Left chest in watermill"],
-    ['watermill', '#7', 0, 'overworld_d2_watermill', "Middle chest in watermill"],
-    ['watermill', '#8', 0, 'overworld_d2_watermill', "Right chest in watermill"],
-    ['watermill', '#4', 0, 'overworld_d2_cave', "Chest in left half of cavern"],
-    ['watermill', '#9', 0, 'overworld_d2_cave', "Chest falling after beating all slimes"],
-    ['watermill', '#5', 0, 'overworld_d2_cave_behind_merman', "Upper chest in right half of cavern"],
-    ['watermill', '#11', 0, 'overworld_d2_cave_behind_merman', "Lower chest in right half of cavern"],
+    // Watermill interior and its caves (D2)
+    ['watermill', 73, 148, 'overworld_d2_watermill', "Left chest in watermill"],
+    ['watermill', 133, 148, 'overworld_d2_watermill', "Middle chest in watermill"],
+    ['watermill', 193, 148, 'overworld_d2_watermill', "Right chest in watermill"],
+    ['watermillcaves', 116, 85, 'overworld_d2_cave', "Chest in left half of cavern"],
+    ['watermillcaves', 116, 149, 'overworld_d2_cave', "Chest falling after beating all slimes"],
+    ['watermillcaves', 764, 117, 'overworld_d2_cave_behind_merman', "Upper chest in right half of cavern"],
+    ['watermillcaves', 812, 181, 'overworld_d2_cave_behind_merman', "Lower chest in right half of cavern"],
     // Ice Manor, Fire Manor (with the A4 caves) and Inoa
     ['ice', '#3', 0, 'ice_manor', 'Reward chest'],
     ['firemanor', '#1', 0, 'fire_manor', 'Reward chest'],

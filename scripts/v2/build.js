@@ -16,7 +16,8 @@ const assignments = require('./assignments.js');
 // Atlas image used for each randomizer region ("world" = the whole overworld). Regions without an entry (shops, casino) have no map.
 const MAPS = [
     { id: 'world', file: 'World.png', title: 'Overworld', regions: /^Overworld/ },
-    { id: 'watermill', file: 'Watermill.png', title: 'Watermill & caverns', regions: /^Overworld D2/, only: s => /^overworld_d2_(watermill|cave)/.test(s.nodeId) },
+    { id: 'watermill', file: 'Watermill.png', title: 'Watermill', regions: /^Overworld D2/, only: s => /^overworld_d2_watermill/.test(s.nodeId) },
+    { id: 'watermillcaves', file: 'WatermillCaves.png', title: 'Watermill caves', regions: /^Overworld D2/, only: s => /^overworld_d2_cave/.test(s.nodeId) },
     { id: 'sanctuary', file: 'SanctuaryArea.png', title: 'Sanctuary area & caves', regions: /^Overworld C2/ },
     { id: 'coalarea', file: 'CoalMineArea.png', title: 'Coal Mine area & caves', regions: /^Overworld B2/, only: s => /^overworld_b2_(upper_mines|cave_to_lake)/.test(s.nodeId) },
     { id: 'murgg', file: 'MurggWoods.png', title: 'Murgg Woods caves', regions: /^Overworld A2/, only: s => /bridge cave|circular cave|Stone Golem/.test(s.name) },
