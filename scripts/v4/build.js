@@ -27,19 +27,22 @@ const HIDDEN = new Set(['River network']);
 const NAME_FIXES = { 'Undeground Waterway': 'Underground Waterway' };
 // Cave maps whose atlas title would clash with a dungeon's name, or reads badly as a pin
 const CAVE_NAMES = {
-    waterway: 'Waterway (D2 side)', firemanor: 'Fire Manor grounds', mimics: 'Ruins & Mimics cave',
-    watermill: 'Watermill', watermillcaves: 'Watermill caves', sanctuary: 'Sanctuary & caves', coalarea: 'Coal Mine area caves', cliffs: 'Well & Lurvy',
+    mimics: 'Mimics cave',
+    watermill: 'Watermill', watermillcaves: 'Watermill caves', sanctuarycave: 'Sanctuary top-left cave', coalmines: 'Coal Mine upper mines', cavetolake: 'Cave to lake', cliffswell: 'Well', lurvy: "Lurvy's shop",
 };
 
 // Entrance of each location on World.png, in image pixels. `side` puts the label left of the pin when the right is busy.
 const PINS = {
-    'overworld-c2-sanctuary-sector--sanctuary': [3230, 1700],
+    'overworld-c2-sanctuary-sector--sanctuarycave': [2569, 1001],
+    'overworld-c2-sanctuary-sector--olen': [2631, 1335],
+    'overworld-c2-sanctuary-sector--cephas': [3614, 1651],
     'lars-crypt': [3555, 1160],
-    'overworld-b2-coal-mine-sector--coalarea': [1560, 1075],
+    'overworld-b2-coal-mine-sector--cavetolake': [1561, 1035],
+    'overworld-b2-coal-mine-sector--coalmines': [2089, 1045],
+    'overworld-b2-coal-mine-sector--coalhouse': [2389, 1291],
     'coal-mine': [2090, 1240],
     'overworld-d2-watermill-sector--watermill': [4630, 1700, 'l'],
     'overworld-d2-watermill-sector--watermillcaves': [4226, 996],
-    'overworld-d2-watermill-sector--waterway': [4975, 1800],
     'undeground-waterway': [5045, 1640],
     'tarn-manor': [4340, 2060],
     "merrick-s-shop": [3380, 3370],
@@ -47,10 +50,9 @@ const PINS = {
     'reptile-lair': [4610, 3200],
     'riverside-casino': [1910, 2600],
     'fairy-pond': [905, 2865],
-    'overworld-b4-nava-s-cabin-sector--navacabin': [1700, 3620, 'l'],
     'nava-s-keep': [1870, 3720],
-    'overworld-e4-cliffs-of-madness--cliffs': [6150, 3700, 'l'],
-    'overworld-e3-lower-desert--deserts': [5230, 2050],
+    'overworld-e4-cliffs-of-madness--cliffswell': [6173, 3651],
+    'overworld-e4-cliffs-of-madness--lurvy': [6137, 3620, 'l'],
     'overworld-e2-upper-desert--desertn': [5130, 1080],
     'ancient-shrine': [6080, 2770, 'l'],
     'magyscar': [3125, 70],
@@ -60,7 +62,7 @@ const PINS = {
     'overworld-a3-ruins-above-fire-manor--mimics': [205, 2430],
     'overworld-a4-fire-manor-sector--firemanor': [560, 3590],
     'fire-manor': [515, 3300],
-    'overworld-a2-murgg-woods--murgg': [765, 1530],
+    'overworld-a2-murgg-woods--murgg': [936, 1144],
     'tower-of-the-great-tree': [620, 650],
     'lake-shrine': [1900, 140],
 };
@@ -111,6 +113,11 @@ for (const r of regions) {
     }
 }
 
+// Soft locks: places you can enter without the logic's required items but may not be able to leave (see README)
+const WARNINGS = {
+    'magyscar': 'Soft lock: do not enter without Bombs, you can get stuck inside',
+};
+
 // Pins, and the sector each pin sits in
 const sectorAt = {};
 locations.filter(l => l.kind === 'sector').forEach(l => { sectorAt[l.code] = l; });
@@ -119,6 +126,7 @@ for (const l of locations) {
     const pin = PINS[l.id];
     if (!pin) throw new Error(`No pin position for ${l.id} (${l.name}): add it to PINS`);
     [l.x, l.y] = pin;
+    if (WARNINGS[l.id]) l.warning = WARNINGS[l.id];
     if (pin[2]) l.side = pin[2];
     const code = 'ABCDE'[Math.floor(l.x / CELL_W)] + (Math.floor(l.y / CELL_H) + 1);
     l.parent = sectorAt[code].id;

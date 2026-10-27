@@ -22,7 +22,8 @@ header .hint{margin-left:auto;color:var(--muted);font-size:12px}
 .tabs button.on{border-color:var(--accent);color:var(--accent)}
 h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 6px}
 .list{overflow:auto;flex:1}
-#stage{flex:1;position:relative;overflow:hidden;background:#000;cursor:grab;touch-action:none}
+#stage{flex:1;position:relative;overflow:hidden;background:#000;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+#stage ::selection{background:transparent}
 #stage.drag{cursor:grabbing}
 #world{position:absolute;left:0;top:0;transform-origin:0 0}
 #world img{display:block;image-rendering:pixelated;max-width:none}
@@ -349,6 +350,7 @@ function renderOverview() {
 function locTip(e, l, s) {
   const lines = [`<b>${esc(locTitle(l))}</b> <small>(${KIND_LABEL[l.kind]})</small>`];
   if (!s.reached) lines.push("You can't get here yet");
+  if (l.warning) lines.push('<b style="color:#ffb454">⚠ ' + esc(l.warning) + '</b>');
   lines.push(s.total ? `${s.open} reachable · ${s.left} left · ${s.total} total` : 'No chests here');
   const links = (neighbours[l.id] || []).map(id => locById[id]).filter(n => n.kind !== 'sector' || n.id !== l.parent);
   if (links.length && l.kind !== 'sector') lines.push('Leads to: ' + esc(links.map(locTitle).join(', ')));

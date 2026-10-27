@@ -13,6 +13,15 @@ They are static HTML pages in `docs/`, built by Node scripts from the randomizer
 | `docs/v2/index.html` | Chest atlas on the vgmaps Alundra maps. Also writes `docs/data/atlas.json`, the pin positions the tracker uses. | `scripts/v2/build.js` |
 | `docs/world_map.html` | First version: interactive graph of item locations. | `scripts/gen_world_map.js` |
 
+## Soft locks
+
+The tracker only says what the logic requires. It does not stop you walking into a place you cannot leave, so keep
+this list in mind (add to it as more turn up):
+
+- **Magyscar: do not enter without Bombs.** The Iron Flail alone gets you in, but you can get stuck inside. The logic
+  therefore requires both the Iron Flail and a Bomb (`overworld_c1` to `magyscar` in `data/world_path.json`), and the
+  pin stays locked until you have both. Enter before that only if you accept the risk.
+
 ## Build
 
 Needs Node.js. The trackers use the atlas pins, so build v2 before v3 and v4:
