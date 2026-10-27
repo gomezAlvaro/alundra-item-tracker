@@ -73,6 +73,13 @@ for (const [mapId, xOrCandidate, y, nodeId, prefix, forced] of assignments) {
     placements[index] = { map: mapId, x, y: py, c: forced || '' };
 }
 
+// Pins moved with the v4 page's edit mode (node scripts/edit-server.js), keyed by "<node>|<full source name>"
+const overrides = JSON.parse(fs.readFileSync(path.join(dataDir, 'pin_overrides.json'), 'utf8'));
+for (const [key, p] of Object.entries(overrides.chests || {})) {
+    const index = sources.findIndex(s => s.nodeId + '|' + s.name === key);
+    if (index < 0) throw new Error(`pin_overrides.json: no source ${key}`);
+    placements[index] = { map: p.map, x: p.x, y: p.y, c: p.c || 'g' };
+}
 // Confidence colours: g = exact chest identified, y = a chest is there but which source it is is a guess, r = approximate pin.
 // A source is 'y' when other sources on the same map hold the same vanilla item and nothing (position on the open overworld) tells them apart.
 const reviewed = require('./confidence.js');

@@ -67,6 +67,9 @@ const PINS = {
     'lake-shrine': [1900, 140],
 };
 
+// Entrance pins moved with the page's edit mode (node scripts/edit-server.js) win over the defaults above
+Object.assign(PINS, data('pin_overrides.json').locations);
+
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const regionOf = {};
 regions.forEach(r => r.nodeIds.forEach(id => { regionOf[id] = r.name; }));

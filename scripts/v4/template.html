@@ -25,6 +25,11 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 #stage{flex:1;position:relative;overflow:hidden;background:#000;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
 #stage ::selection{background:transparent}
 #stage.drag{cursor:grabbing}
+body.editing .pin,body.editing .mk{cursor:move}
+body.editing .pin .dot,body.editing .mk{outline:2px dashed #4cc2ff;outline-offset:2px}
+body.editing .cellz{pointer-events:none}
+#editRow{display:none;margin-top:6px;align-items:center;gap:8px;flex-wrap:wrap}
+#editMsg{font-size:12px;color:var(--muted)}
 #world{position:absolute;left:0;top:0;transform-origin:0 0}
 #world img{display:block;image-rendering:pixelated;max-width:none}
 #world.overview .detail,#world.detail .overview{display:none}
@@ -136,6 +141,7 @@ button.act{padding:5px 10px;border:1px solid var(--border);border-radius:6px;bac
       <label><input type="checkbox" id="showDone" checked> collected</label>
       <button class="act" id="reset">Reset progress</button>
     </div>
+    <div class="row" id="editRow"><button class="act" id="editBtn">Edit pins</button><button class="act" id="saveBtn" disabled>Save</button><span id="editMsg"></span></div>
   </div>
   <div class="sec"><h2>Items you have</h2><div class="inv" id="inv"></div></div>
   <div class="sec" id="availSec" style="display:none"><h2>Available in reachable chests</h2><div id="avail"></div></div>
@@ -166,6 +172,8 @@ const { w: CW, h: CH } = GRAPH.cell;
 const locById = Object.fromEntries(GRAPH.locations.map(l => [l.id, l]));
 const sectors = GRAPH.locations.filter(l => l.kind === 'sector');
 const pinned = GRAPH.locations.filter(l => l.kind !== 'sector');
+// Chests of a pin with no map of its own (Merrick's shop) are not drawn on the overview: the pin stands for them
+const inPin = new Set(pinned.filter(l => l.maps.every(m => m === 'world')).flatMap(l => l.sources));
 const keyOf = i => `${ATLAS.sources[i].full} (${ATLAS.sources[i].vanilla})`;
 const neighbours = {};
 GRAPH.edges.forEach(([a, b]) => { (neighbours[a] = neighbours[a] || []).push(b); (neighbours[b] = neighbours[b] || []).push(a); });
@@ -313,7 +321,7 @@ function renderOverview() {
     c.style.cssText = `left:${l.col * CW}px;top:${l.row * CH}px;width:${CW}px;height:${CH}px`;
     c.onmouseenter = c.onmousemove = e => locTip(e, l, s);
     c.onmouseleave = hideTip;
-    c.onclick = () => { if (!moved) go(l.id); };
+    c.onclick = () => { if (!moved && !editing) go(l.id); };
     cells.append(c);
   }
 
@@ -321,14 +329,15 @@ function renderOverview() {
   const ch = $('chests'); ch.innerHTML = '';
   ch.classList.add('ov');
   ATLAS.sources.forEach((_, i) => {
-    const p = ATLAS.placements[i]; if (!p || p.map !== 'world') return;
+    const p = ATLAS.placements[i]; if (!p || p.map !== 'world' || inPin.has(i)) return;
     const st = stateOf(i);
     if ((st === 'lock' && !$('showLocked').checked) || (st === 'done' && !$('showDone').checked)) return;
     const m = document.createElement('div');
     m.className = `mk ${st} c${p.c}`; m.style.left = p.x + 'px'; m.style.top = p.y + 'px'; m.style.pointerEvents = 'auto';
     m.onmouseenter = m.onmousemove = e => chestTip(e, i);
     m.onmouseleave = hideTip;
-    m.onclick = e => { e.stopPropagation(); if (!moved) toggle(i); };
+    m.onclick = e => { e.stopPropagation(); if (!moved && !editing) toggle(i); };
+    makeEditable(m, p, () => saveChest(i));
     ch.append(m);
   });
 
@@ -342,7 +351,8 @@ function renderOverview() {
     p.lastChild.textContent = s.total ? `${l.name} · ${s.left} left of ${s.total}` : l.name;
     p.onmouseenter = p.onmousemove = e => locTip(e, l, s);
     p.onmouseleave = hideTip;
-    p.onclick = e => { e.stopPropagation(); if (!moved) go(l.id); };
+    p.onclick = e => { e.stopPropagation(); if (!moved && !editing) go(l.id); };
+    makeEditable(p, l, () => saveLoc(l));
     pins.append(p);
   }
 }
@@ -398,7 +408,8 @@ function renderMarkers() {
     m.className = `mk ${st} c${p.c}`; m.style.left = p.x + 'px'; m.style.top = p.y + 'px'; m.dataset.i = i; m.style.pointerEvents = 'auto';
     m.onmouseenter = m.onmousemove = e => chestTip(e, i);
     m.onmouseleave = hideTip;
-    m.onclick = () => { if (!moved) toggle(i); };
+    m.onclick = () => { if (!moved && !editing) toggle(i); };
+    makeEditable(m, p, () => saveChest(i));
     mk.append(m);
 
     const row = document.createElement('div'); row.className = 'src ' + st;
@@ -589,6 +600,54 @@ for (const b of document.querySelectorAll('#zoom button')) b.addEventListener('p
 let lastWidth = innerWidth;
 addEventListener('resize', () => { if (innerWidth === lastWidth) return; lastWidth = innerWidth; for (const k in fitted) delete fitted[k]; here ? fitDetail() : fitOverview(); fitted[here ? here.id + '/' + curMap : 'overview'] = true; });
 addEventListener('keydown', e => { if (e.key === 'Escape' && here && !(e.target.closest && e.target.closest('input'))) go(here.parent || null); });
+
+// ---- pin editing: only offered when the page is served by scripts/edit-server.js
+let editing = false;
+const dirty = { chests: {}, locations: {} };
+const dirtyCount = () => Object.keys(dirty.chests).length + Object.keys(dirty.locations).length;
+function updateSave() {
+  $('saveBtn').disabled = !dirtyCount();
+  $('saveBtn').textContent = dirtyCount() ? `Save ${dirtyCount()} change(s)` : 'Save';
+}
+function saveChest(i) {
+  const p = ATLAS.placements[i], s = ATLAS.sources[i];
+  p.c = 'g'; dirty.chests[`${s.node}|${s.full}`] = { map: p.map, x: p.x, y: p.y, c: 'g' }; updateSave();
+}
+function saveLoc(l) { dirty.locations[l.id] = l.side ? [l.x, l.y, l.side] : [l.x, l.y]; updateSave(); }
+// Drag a marker or pin (an object with x, y) while editing; commit() runs once it is dropped
+function makeEditable(el, obj, commit) {
+  el.addEventListener('pointerdown', e => {
+    if (!editing || e.button) return;
+    e.stopPropagation(); e.preventDefault();
+    const v = curView(), r = stage.getBoundingClientRect();
+    const at = ev => [(ev.clientX - r.left - v.x) / v.k, (ev.clientY - r.top - v.y) / v.k];
+    const [sx, sy] = at(e), ox = obj.x - sx, oy = obj.y - sy;
+    el.setPointerCapture(e.pointerId); hideTip();
+    const pos = ev => { const [x, y] = at(ev); return [Math.round(x + ox), Math.round(y + oy)]; };
+    const move = ev => { const [x, y] = pos(ev); el.style.left = x + 'px'; el.style.top = y + 'px'; };
+    const up = ev => {
+      el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up);
+      [obj.x, obj.y] = pos(ev); commit();
+    };
+    el.addEventListener('pointermove', move); el.addEventListener('pointerup', up);
+  });
+}
+$('editBtn').onclick = () => {
+  editing = !editing; document.body.classList.toggle('editing', editing);
+  $('editBtn').textContent = editing ? 'Stop editing' : 'Edit pins';
+  $('editMsg').textContent = editing ? 'Drag a pin or chest to move it, then Save.' : '';
+  hideTip(); render();
+};
+$('saveBtn').onclick = async () => {
+  $('saveBtn').disabled = true; $('editMsg').textContent = 'Saving and rebuilding…';
+  try {
+    const r = await fetch('/api/save', { method: 'POST', body: JSON.stringify(dirty) });
+    if (!r.ok) throw new Error(await r.text());
+    dirty.chests = {}; dirty.locations = {}; updateSave();
+    $('editMsg').textContent = 'Saved to data/pin_overrides.json and rebuilt. Ask Claude to commit it.';
+  } catch (e) { alert('Save failed: ' + e.message); updateSave(); $('editMsg').textContent = ''; }
+};
+fetch('/api/ping').then(r => r.ok ? r.json() : null).then(j => { if (j && j.edit) $('editRow').style.display = 'flex'; }).catch(() => {});
 
 // ---- controls
 function acceptSpoiler(text) {

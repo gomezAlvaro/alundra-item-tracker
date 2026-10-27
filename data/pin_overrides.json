@@ -1,0 +1,88 @@
+{
+  "chests": {
+    "overworld_d2|Overworld D2: Chest in cave next to Underground Waterway": {
+      "map": "world",
+      "x": 4745,
+      "y": 1624,
+      "c": "g"
+    },
+    "overworld_c4|Overworld C4: Chest hidden among the trees near the middle": {
+      "map": "world",
+      "x": 2968,
+      "y": 3150,
+      "c": "g"
+    },
+    "merrick_shop_4|Merrick's Shop: Item traded for 30 Gilded Falcons": {
+      "map": "world",
+      "x": 3417,
+      "y": 3335,
+      "c": "g"
+    },
+    "overworld_e3_cape_cave|Overworld E3: Chest in cave": {
+      "map": "world",
+      "x": 5228,
+      "y": 1983,
+      "c": "g"
+    },
+    "overworld_a4_manor_caves_behind_flail|Overworld A4: Chest in left branch of final cave before Fire Manor": {
+      "map": "world",
+      "x": 565,
+      "y": 3489,
+      "c": "g"
+    },
+    "overworld_b4_nava_hut_behind_spring|Overworld B4: Chest in Nava's cabin": {
+      "map": "world",
+      "x": 1910,
+      "y": 3551,
+      "c": "g"
+    }
+  },
+  "locations": {
+    "undeground-waterway": [
+      4806,
+      1633
+    ],
+    "merrick-s-shop": [
+      3378,
+      3295
+    ],
+    "overworld-e4-cliffs-of-madness--cliffswell": [
+      6177,
+      3653
+    ],
+    "overworld-e4-cliffs-of-madness--lurvy": [
+      6140,
+      3617,
+      "l"
+    ],
+    "ancient-shrine": [
+      5670,
+      2562,
+      "l"
+    ],
+    "riverside-casino": [
+      2106,
+      2537
+    ],
+    "fairy-pond": [
+      1310,
+      2375
+    ],
+    "overworld-a3-ruins-above-fire-manor--mimics": [
+      204,
+      2366
+    ],
+    "fire-manor": [
+      516,
+      3312
+    ],
+    "nava-s-keep": [
+      1936,
+      3550
+    ],
+    "coastal-cave": [
+      3339,
+      3504
+    ]
+  }
+}
