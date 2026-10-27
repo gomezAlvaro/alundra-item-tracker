@@ -384,8 +384,6 @@ function renderCrumbs() {
     return;
   }
   el('button', 'crumb', 'World').onclick = () => go(null);
-  const parent = here.parent && locById[here.parent];
-  if (parent) { el('span', 'sep', '›'); el('button', 'crumb', locTitle(parent)).onclick = () => go(parent.id); }
   el('span', 'sep', '›'); el('span', 'here', locTitle(here));
   if (here.maps.length > 1) {
     const tabs = el('div', 'tabs', '');
@@ -495,6 +493,13 @@ function renderMarkers() {
   const ids = here.sources.filter(i => ATLAS.placements[i].map === curMap).sort((a, b) => order[stateOf(a)] - order[stateOf(b)]);
   const s = locStats(here), onMap = here.sources.filter(i => ATLAS.placements[i].map === curMap), left = onMap.filter(i => !collected.has(i));
   $('listTitle').textContent = s.total ? `${left.filter(i => reach.has(i)).length} reachable · ${left.length} left · ${onMap.length} chests on this map${onMap.length < s.total ? ` (${s.total} in all)` : ''}` : 'No chests here';
+  if (here.sources.length) {
+    const all = here.sources.every(i => collected.has(i));
+    const b = document.createElement('button'); b.className = 'act'; b.style.marginBottom = '6px';
+    b.textContent = all ? `Uncheck all ${here.sources.length} chests here` : `Check all ${here.sources.filter(i => !collected.has(i)).length} remaining chests here`;
+    b.onclick = () => { here.sources.forEach(i => all ? collected.delete(i) : collected.add(i)); persist(); render(); };
+    list.append(b);
+  }
   ids.forEach(i => {
     const p = ATLAS.placements[i], st = stateOf(i);
     if ((st === 'lock' && !$('showLocked').checked) || (st === 'done' && !$('showDone').checked)) return;
