@@ -21,6 +21,8 @@ this list in mind (add to it as more turn up):
 - **Magyscar: do not enter without Bombs.** The Iron Flail alone gets you in, but you can get stuck inside. The logic
   therefore requires both the Iron Flail and a Bomb (`overworld_c1` to `magyscar` in `data/world_path.json`), and the
   pin stays locked until you have both. Enter before that only if you accept the risk.
+- **Mimics cave (A3): do not enter without Spring Beans.** Without them you get locked in. This one is only a warning on
+  the pin's tooltip, the logic does not change.
 
 ## Build
 

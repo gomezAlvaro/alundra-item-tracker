@@ -119,6 +119,7 @@ for (const r of regions) {
 // Soft locks: places you can enter without the logic's required items but may not be able to leave (see README)
 const WARNINGS = {
     'magyscar': 'Soft lock: do not enter without Bombs, you can get stuck inside',
+    'overworld-a3-ruins-above-fire-manor--mimics': 'Soft lock: do not enter without Spring Beans, you can get stuck inside',
 };
 
 // Pins, and the sector each pin sits in
