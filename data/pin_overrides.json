@@ -35,6 +35,12 @@
       "x": 1910,
       "y": 3551,
       "c": "g"
+    },
+    "coastal_cave|Coastal Cave: Chest hidden behind bricks near entrance": {
+      "map": "coastal",
+      "x": 210,
+      "y": 2420,
+      "c": "g"
     }
   },
   "locations": {
